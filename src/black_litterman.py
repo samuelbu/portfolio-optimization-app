@@ -23,6 +23,19 @@ RISK_LABELS = {
 }
 
 
+def score_risk_questionnaire(answers: dict[str, int]) -> int:
+    expected_questions = ["q1", "q2", "q3", "q4", "q5"]
+    for question in expected_questions:
+        if question not in answers:
+            raise ValueError(f"Missing answer for question: {question}")
+        if answers[question] not in range(1, 6):
+            raise ValueError(f"Answer to {question} must be between 1 and 5.")
+
+    total_score = sum(answers[question] for question in expected_questions)
+    risk_score = round(1 + (total_score - 5) * (9 / 20))
+    return max(1, min(10, int(risk_score)))
+
+
 def compute_returns(prices: pd.DataFrame, method: str = "log") -> pd.DataFrame:
     prices = prices.astype(float)
     if method == "log":
