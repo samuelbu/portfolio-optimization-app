@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-import os
-import sys
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
+from src.data_loader import load_features, build_prices_and_market_caps
+from src import ml_views
+from src.black_litterman import run_optimization_pipeline, RISK_LABELS
 
-from data_loader import load_features, build_prices_and_market_caps
-import ml_views
-from black_litterman import run_optimization_pipeline, RISK_LABELS
+BASE_DIR = Path(__file__).resolve().parent
+DATA_PATH = BASE_DIR / "data" / "features.parquet"
 
 st.set_page_config(
     page_title="Smart Portfolio Builder",
@@ -29,14 +29,14 @@ RISK_PRESETS = {
 
 @st.cache_data
 def load_base_data():
-    df = load_features("data/features.parquet")
+    df = load_features(DATA_PATH)
     prices, market_caps, sectors = build_prices_and_market_caps(df)
     return df, prices, market_caps, sectors
 
 
 @st.cache_resource
 def train_and_predict():
-    df_clean, feature_cols, target_col = ml_views.load_and_prep_data("data/features.parquet")
+    df_clean, feature_cols, target_col = ml_views.load_and_prep_data(DATA_PATH)
     train_df, _ = ml_views.time_series_split(df_clean, split_date="2024-01-01")
     rf_model, xgb_model = ml_views.train_models(train_df[feature_cols], train_df[target_col])
     ml_pred = ml_views.generate_ml_views(df_clean, feature_cols, rf_model, xgb_model)

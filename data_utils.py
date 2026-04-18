@@ -78,3 +78,5 @@ def dataset_summary(df: pd.DataFrame) -> dict:
         'start_date': df['date'].min().date().isoformat(),
         'end_date': df['date'].max().date().isoformat(),
     }
+#.\.venv\Scripts\Activate.ps1
+#streamlit run app.py

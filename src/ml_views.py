@@ -56,7 +56,7 @@ def train_models(X_train: pd.DataFrame, y_train: pd.Series):
         n_estimators=120,
         max_depth=5,
         random_state=42,
-        n_jobs=-1,
+        n_jobs=1,
     )
     rf_model.fit(X_train, y_train)
 
@@ -66,6 +66,7 @@ def train_models(X_train: pd.DataFrame, y_train: pd.Series):
         learning_rate=0.08,
         subsample=0.9,
         colsample_bytree=0.9,
+        n_jobs=1,
         random_state=42,
         objective="reg:squarederror",
     )
@@ -77,13 +78,14 @@ def train_models(X_train: pd.DataFrame, y_train: pd.Series):
 def generate_ml_views(df: pd.DataFrame, feature_cols: list[str], rf_model, xgb_model):
     latest_data = df.sort_values("date").groupby("ticker").tail(1).copy()
     X_latest = latest_data[feature_cols].astype(float)
+    X_latest_np = X_latest.to_numpy()
 
     rf_preds = rf_model.predict(X_latest)
     xgb_preds = xgb_model.predict(X_latest)
     ensemble_preds = (rf_preds + xgb_preds) / 2.0
     annualized_returns = ensemble_preds * 12
 
-    tree_preds = np.array([tree.predict(X_latest) for tree in rf_model.estimators_])
+    tree_preds = np.array([tree.predict(X_latest_np) for tree in rf_model.estimators_])
     rf_std = np.std(tree_preds, axis=0)
     confidence = np.clip(1.0 - (rf_std * 10), 0.1, 0.9)
 

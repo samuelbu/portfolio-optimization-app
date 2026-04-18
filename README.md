@@ -33,21 +33,27 @@ portfolio_app/
 ## Local run
 
 ```bash
+pyenv local 3.12
 pip install -r requirements.txt
 streamlit run app.py
 ```
+
+If you use `venv` instead of `pyenv`, create the environment with Python 3.12 first.
 
 ## Streamlit Cloud deployment
 
 1. Push this folder to a GitHub repository.
 2. In Streamlit Cloud, create a new app and connect the repo.
-3. Set the main file path to:
+3. Open `Advanced settings` and set the Python version to `3.12`.
+4. Set the main file path to:
 
 ```text
 app.py
 ```
 
-4. Deploy.
+5. Deploy.
+
+If the app was already deployed with the wrong Python version, delete it and redeploy it with Python 3.12. Streamlit Community Cloud does not change Python versions in place.
 
 ## Notes
 
