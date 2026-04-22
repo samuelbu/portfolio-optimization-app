@@ -1,22 +1,31 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-from src.data_loader import load_features, build_prices_and_market_caps
+from src.data_loader import build_prices_and_market_caps, load_features
 from src import ml_views
-from src.black_litterman import run_optimization_pipeline, RISK_LABELS, score_risk_questionnaire
+from src.black_litterman import (
+    MAX_VOLATILITY_MAP,
+    RISK_LABELS,
+    compute_portfolio_metrics,
+    run_optimization_pipeline,
+    score_risk_questionnaire,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "data" / "features.parquet"
+RISK_FREE_RATE = 0.045
+RANDOM_PORTFOLIO_COUNT = 350
 
 st.set_page_config(
     page_title="Smart Portfolio Builder",
-    page_icon="📈",
+    page_icon=":chart_with_upwards_trend:",
     layout="wide",
 )
 
@@ -120,6 +129,7 @@ METRIC_HELP = {
     "expected_return": "This is the model's estimate of how much the portfolio could grow in a typical year. It is not guaranteed, but it helps compare more defensive and more growth-oriented portfolios.",
     "volatility": "This shows how much the portfolio may move up and down over time. Higher volatility means a bumpier ride and larger swings in value.",
     "sharpe_ratio": "This compares expected reward to expected risk. Higher values generally mean the portfolio is offering more expected return for each unit of risk taken.",
+    "risk_profile": "This is the investor profile created from your questionnaire. Higher scores aim for more growth and accept more risk.",
     "cash_left": "This is the part of your budget that stays uninvested after rounding down to whole shares.",
 }
 
@@ -140,317 +150,672 @@ def train_and_predict():
     return df_clean, ml_pred
 
 
-def build_sector_exposure(weights: pd.Series, sectors: pd.Series) -> pd.DataFrame:
-    tmp = pd.DataFrame({"ticker": weights.index, "weight": weights.values})
-    tmp["sector"] = tmp["ticker"].map(sectors.to_dict())
-    return tmp.groupby("sector", as_index=False)["weight"].sum().sort_values("weight", ascending=False)
+def add_company_name(ticker: str) -> str:
+    return COMPANY_NAMES.get(ticker, ticker)
 
 
-def build_growth_chart(prices: pd.DataFrame, weights: pd.Series) -> go.Figure:
-    top = weights.sort_values(ascending=False).head(5).index.tolist()
-    norm = prices[top] / prices[top].iloc[0]
-    fig = go.Figure()
-    for col in norm.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=norm.index,
-                y=norm[col],
-                mode="lines",
-                name=f"{COMPANY_NAMES.get(col, col)} ({col})",
-            )
-        )
-    fig.update_layout(
-        title="Normalized price history of top holdings",
-        xaxis_title="Date",
-        yaxis_title="Growth of $1",
-        legend_title="Company",
-        height=420,
-        margin=dict(l=10, r=10, t=50, b=10),
-    )
-    return fig
-
-
-def render_risk_questionnaire() -> tuple[int | None, str | None]:
-    with st.sidebar:
-        st.header("Step 1: Your preferences")
-        st.caption("Answer these questions to match the portfolio to your comfort with risk.")
-
-        answered = sum(1 for key, _, _ in QUESTIONNAIRE if st.session_state.get(key) is not None)
-        st.progress(answered / len(QUESTIONNAIRE), text=f"{answered} of {len(QUESTIONNAIRE)} questions answered")
-
-        answers: dict[str, int] = {}
-        with st.form("risk_questionnaire"):
-            for key, label, options in QUESTIONNAIRE:
-                labels = [option_label for option_label, _ in options]
-                selected = st.radio(
-                    label,
-                    options=labels,
-                    index=None,
-                    key=key,
-                )
-                if selected is not None:
-                    answers[key] = dict(options)[selected]
-
-            capital = st.number_input("Budget (USD)", min_value=1000, max_value=10000000, value=10000, step=500)
-            show_details = st.checkbox("Show technical details", value=False)
-            submitted = st.form_submit_button("Build my portfolio", type="primary", use_container_width=True)
-
-    if not submitted:
-        st.info("Use the left panel to answer the questionnaire, then click **Build my portfolio**.")
-        return None, None
-
-    missing = [label for key, label, _ in QUESTIONNAIRE if key not in answers]
-    if missing:
-        st.sidebar.warning("Please answer all five questions before continuing.")
-        return None, None
-
-    risk_score = score_risk_questionnaire(answers)
-    risk_label = RISK_LABELS[risk_score]
-    explanation = RISK_EXPLANATIONS[risk_score]
-
-    with st.container(border=True):
-        st.success(f"Your profile is **{risk_label} ({risk_score}/10)**.")
-        st.write(explanation)
-
-    st.session_state["capital"] = float(capital)
-    st.session_state["show_details"] = show_details
-    return risk_score, risk_label
-
-
-def add_company_names(df: pd.DataFrame, ticker_col: str = "Ticker") -> pd.DataFrame:
-    enriched = df.copy()
-    enriched["Company"] = enriched[ticker_col].map(lambda ticker: COMPANY_NAMES.get(ticker, ticker))
-    if ticker_col == "Ticker":
-        columns = ["Company", "Ticker"] + [col for col in enriched.columns if col not in {"Company", "Ticker"}]
-        enriched = enriched[columns]
-    return enriched
-
-
-def build_company_snapshot(raw_df: pd.DataFrame, weights_df: pd.DataFrame, ml_pred: pd.DataFrame) -> pd.DataFrame:
-    latest_snapshot = (
+def latest_company_snapshot(raw_df: pd.DataFrame) -> pd.DataFrame:
+    snapshot = (
         raw_df.sort_values("date")
         .groupby("ticker")
-        .tail(1)[["ticker", "sector", "prc", "mkt_cap", "pe_ratio"]]
+        .tail(1)[["ticker", "sector", "prc", "mkt_cap", "pe_ratio", "rolling_beta"]]
         .copy()
     )
-    latest_snapshot["Company"] = latest_snapshot["ticker"].map(lambda ticker: COMPANY_NAMES.get(ticker, ticker))
-    latest_snapshot = latest_snapshot.rename(
+    snapshot["Company"] = snapshot["ticker"].map(add_company_name)
+    return snapshot.rename(
         columns={
             "ticker": "Ticker",
             "sector": "Sector",
             "prc": "Latest Price ($)",
             "mkt_cap": "Market Cap ($)",
             "pe_ratio": "P/E Ratio",
+            "rolling_beta": "Rolling Beta",
         }
     )
 
+
+def build_portfolio_snapshot(
+    raw_df: pd.DataFrame,
+    weights: pd.Series,
+    allocation_df: pd.DataFrame,
+    ml_pred: pd.DataFrame,
+    capital: float,
+) -> pd.DataFrame:
+    holdings = pd.DataFrame({"Ticker": weights.index, "Weight": weights.values})
+    holdings["Weight (%)"] = holdings["Weight"] * 100
+    holdings["Company"] = holdings["Ticker"].map(add_company_name)
+    holdings["Target Allocation ($)"] = holdings["Weight"] * capital
+
+    latest_snapshot = latest_company_snapshot(raw_df)
     ml_summary = ml_pred.rename(
         columns={
             "ticker": "Ticker",
-            "return": "Expected Return",
-            "confidence": "Model Confidence",
+            "return": "Predicted Return",
+            "confidence": "Confidence",
         }
     ).copy()
 
-    snapshot = weights_df.merge(latest_snapshot, on=["Ticker", "Company"], how="left")
+    snapshot = holdings.merge(latest_snapshot, on=["Ticker", "Company"], how="left")
+    snapshot = snapshot.merge(allocation_df, on="Ticker", how="left", suffixes=("", "_trade"))
     snapshot = snapshot.merge(ml_summary, on="Ticker", how="left")
-    snapshot["Allocation ($)"] = snapshot["Weight (%)"] / 100 * float(st.session_state["capital"])
-    snapshot["Market Cap ($)"] = pd.to_numeric(snapshot["Market Cap ($)"], errors="coerce")
-    snapshot["P/E Ratio"] = pd.to_numeric(snapshot["P/E Ratio"], errors="coerce")
-    snapshot["Latest Price ($)"] = pd.to_numeric(snapshot["Latest Price ($)"], errors="coerce")
-    snapshot["Expected Return"] = pd.to_numeric(snapshot["Expected Return"], errors="coerce")
-    snapshot["Model Confidence"] = pd.to_numeric(snapshot["Model Confidence"], errors="coerce")
+
+    numeric_cols = [
+        "Weight",
+        "Weight (%)",
+        "Target Allocation ($)",
+        "Latest Price ($)",
+        "Market Cap ($)",
+        "P/E Ratio",
+        "Rolling Beta",
+        "Allocation ($)",
+        "Shares",
+        "Price ($)",
+        "Predicted Return",
+        "Confidence",
+    ]
+    for col in numeric_cols:
+        if col in snapshot.columns:
+            snapshot[col] = pd.to_numeric(snapshot[col], errors="coerce")
+
+    snapshot["Sector"] = snapshot["Sector"].fillna("Unknown")
+    snapshot["Allocation ($)"] = snapshot["Allocation ($)"].fillna(0.0)
+    snapshot["Shares"] = snapshot["Shares"].fillna(0).astype(int)
+    snapshot["Price ($)"] = snapshot["Price ($)"].fillna(snapshot["Latest Price ($)"])
     return snapshot.sort_values("Weight (%)", ascending=False).reset_index(drop=True)
 
 
-def build_allocation_chart(company_snapshot: pd.DataFrame) -> go.Figure:
-    top = company_snapshot.head(10).copy()
+def build_sector_exposure(weights: pd.Series, sectors: pd.Series) -> pd.DataFrame:
+    tmp = pd.DataFrame({"ticker": weights.index, "weight": weights.values})
+    tmp["sector"] = tmp["ticker"].map(sectors.to_dict()).fillna("Unknown")
+    return tmp.groupby("sector", as_index=False)["weight"].sum().sort_values("weight", ascending=False)
+
+
+def build_sector_commentary(sector_df: pd.DataFrame) -> str:
+    top_sector = sector_df.iloc[0]
+    top_weight = top_sector["weight"] * 100
+    if top_weight >= 35:
+        return f"This portfolio is concentrated in {top_sector['sector']} ({top_weight:.1f}%)."
+    if top_weight >= 25:
+        return f"This portfolio leans heavily toward {top_sector['sector']} ({top_weight:.1f}%)."
+    return f"This portfolio is fairly diversified, with its largest sector exposure in {top_sector['sector']} ({top_weight:.1f}%)."
+
+
+def build_display_snapshot(portfolio_snapshot: pd.DataFrame) -> pd.DataFrame:
+    display = portfolio_snapshot[portfolio_snapshot["Weight (%)"] > 0.05].copy()
+    if display.empty:
+        display = portfolio_snapshot.head(10).copy()
+    return display.reset_index(drop=True)
+
+
+def build_top_holdings_chart(portfolio_snapshot: pd.DataFrame) -> go.Figure:
+    top = portfolio_snapshot.head(10).copy()
     top["Holding"] = top["Company"] + " (" + top["Ticker"] + ")"
     fig = px.bar(
         top,
         x="Holding",
-        y="Allocation ($)",
+        y="Weight (%)",
         color="Sector",
-        title="Where your money goes",
+        text="Weight (%)",
+        title="Top 10 holdings by portfolio weight",
         hover_data={
             "Weight (%)": ":.2f",
-            "Allocation ($)": ":,.0f",
-            "Latest Price ($)": ":.2f",
-            "Expected Return": ":.1%",
+            "Target Allocation ($)": ":,.0f",
+            "Predicted Return": ":.1%",
+            "Confidence": ":.0%",
             "Holding": False,
         },
     )
+    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
     fig.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10), xaxis_title="")
     return fig
 
 
-def build_company_map(company_snapshot: pd.DataFrame) -> go.Figure:
-    plot_df = company_snapshot.head(12).copy()
-    plot_df["Holding"] = plot_df["Company"] + " (" + plot_df["Ticker"] + ")"
-    fig = px.scatter(
-        plot_df,
-        x="P/E Ratio",
-        y="Expected Return",
-        size="Weight (%)",
-        color="Sector",
-        hover_name="Holding",
-        hover_data={
-            "Latest Price ($)": ":.2f",
-            "Market Cap ($)": ":,.0f",
-            "Model Confidence": ":.0%",
-            "Weight (%)": ":.2f",
-        },
-        title="Company map: valuation vs expected growth",
+def build_allocation_pie(portfolio_snapshot: pd.DataFrame) -> go.Figure:
+    pie_df = portfolio_snapshot.copy()
+    pie_df["Holding"] = pie_df["Company"] + " (" + pie_df["Ticker"] + ")"
+    pie_df = pie_df[pie_df["Weight (%)"] >= 1.0].copy()
+
+    other_weight = max(0.0, 100 - pie_df["Weight (%)"].sum())
+    if other_weight > 0.01:
+        pie_df = pd.concat(
+            [
+                pie_df,
+                pd.DataFrame(
+                    {
+                        "Holding": ["Other"],
+                        "Weight (%)": [other_weight],
+                    }
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    fig = px.pie(
+        pie_df,
+        values="Weight (%)",
+        names="Holding",
+        title="Allocation mix",
+        hole=0.35,
     )
+    fig.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+
+def build_sector_chart(sector_df: pd.DataFrame) -> go.Figure:
+    chart_df = sector_df.assign(weight_pct=sector_df["weight"] * 100)
+    fig = px.bar(
+        chart_df,
+        x="sector",
+        y="weight_pct",
+        text="weight_pct",
+        title="Sector exposure",
+        labels={"sector": "Sector", "weight_pct": "Weight (%)"},
+    )
+    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+    fig.update_layout(height=380, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+
+def build_risk_gauge(volatility: float, risk_score: int) -> go.Figure:
+    threshold = MAX_VOLATILITY_MAP[risk_score] * 100
+    max_axis = max(35.0, threshold * 1.25)
+    fig = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=volatility * 100,
+            number={"suffix": "%", "valueformat": ".1f"},
+            title={"text": "Expected volatility"},
+            gauge={
+                "axis": {"range": [0, max_axis]},
+                "bar": {"color": "#1f77b4"},
+                "steps": [
+                    {"range": [0, max_axis * 0.4], "color": "#d8f3dc"},
+                    {"range": [max_axis * 0.4, max_axis * 0.7], "color": "#ffe8a1"},
+                    {"range": [max_axis * 0.7, max_axis], "color": "#f8c7c7"},
+                ],
+                "threshold": {
+                    "line": {"color": "#d62728", "width": 4},
+                    "thickness": 0.8,
+                    "value": threshold,
+                },
+            },
+        )
+    )
+    fig.update_layout(height=320, margin=dict(l=20, r=20, t=60, b=10))
+    return fig
+
+
+def build_random_portfolios(
+    expected_returns: pd.Series,
+    cov_matrix: pd.DataFrame,
+    n_portfolios: int = RANDOM_PORTFOLIO_COUNT,
+    risk_free_rate: float = RISK_FREE_RATE,
+) -> pd.DataFrame:
+    rng = np.random.default_rng(42)
+    mu = expected_returns.astype(float).values
+    sigma = cov_matrix.loc[expected_returns.index, expected_returns.index].astype(float).values
+    weights = rng.dirichlet(np.ones(len(expected_returns)), size=n_portfolios)
+    returns = weights @ mu
+    volatility = np.sqrt(np.einsum("ij,jk,ik->i", weights, sigma, weights))
+    sharpe = np.divide(
+        returns - risk_free_rate,
+        volatility,
+        out=np.zeros_like(returns),
+        where=volatility > 0,
+    )
+    return pd.DataFrame(
+        {
+            "Return": returns * 100,
+            "Volatility": volatility * 100,
+            "Sharpe": sharpe,
+        }
+    )
+
+
+def build_risk_return_chart(
+    expected_returns: pd.Series,
+    cov_matrix: pd.DataFrame,
+    optimized_weights: pd.Series,
+    equal_weights: pd.Series,
+) -> go.Figure:
+    cloud = build_random_portfolios(expected_returns, cov_matrix)
+    fig = px.scatter(
+        cloud,
+        x="Volatility",
+        y="Return",
+        color="Sharpe",
+        color_continuous_scale="Viridis",
+        title="Risk vs return",
+        labels={"Volatility": "Expected volatility (%)", "Return": "Expected return (%)"},
+        opacity=0.45,
+    )
+
+    optimized_metrics = compute_portfolio_metrics(
+        optimized_weights,
+        expected_returns,
+        cov_matrix,
+        risk_free_rate=RISK_FREE_RATE,
+    )
+    equal_metrics = compute_portfolio_metrics(
+        equal_weights,
+        expected_returns,
+        cov_matrix,
+        risk_free_rate=RISK_FREE_RATE,
+    )
+
+    points = [
+        ("Optimized portfolio", optimized_metrics, "#0b6e4f"),
+        ("Equal-weight portfolio", equal_metrics, "#d97706"),
+    ]
+
+    for name, metrics, color in points:
+        fig.add_trace(
+            go.Scatter(
+                x=[metrics["volatility"] * 100],
+                y=[metrics["expected_return"] * 100],
+                mode="markers+text",
+                name=name,
+                text=[name],
+                textposition="top center",
+                marker=dict(size=14, color=color, line=dict(width=2, color="white")),
+                hovertemplate=f"{name}<br>Return: %{{y:.1f}}%<br>Volatility: %{{x:.1f}}%<extra></extra>",
+            )
+        )
+
+    fig.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
+
+
+def build_market_benchmark(raw_df: pd.DataFrame) -> pd.Series:
+    benchmark = (
+        raw_df[["date", "mkt_rf", "rf"]]
+        .drop_duplicates()
+        .dropna()
+        .sort_values("date")
+        .set_index("date")
+    )
+    return (benchmark["mkt_rf"] + benchmark["rf"]).rename("Market benchmark")
+
+
+def build_asset_return_panel(raw_df: pd.DataFrame, tickers: list[str]) -> pd.DataFrame:
+    panel = (
+        raw_df.pivot_table(index="date", columns="ticker", values="ret", aggfunc="last")
+        .sort_index()
+        .reindex(columns=tickers)
+    )
+    return panel.dropna(how="all").fillna(0.0)
+
+
+def build_performance_frame(
+    optimized_weights: pd.Series,
+    equal_weights: pd.Series,
+    raw_df: pd.DataFrame,
+    capital: float,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    asset_returns = build_asset_return_panel(raw_df, optimized_weights.index.tolist())
+    optimized_returns = (asset_returns @ optimized_weights.reindex(asset_returns.columns).fillna(0.0)).rename("Optimized portfolio")
+    equal_returns = (asset_returns @ equal_weights.reindex(asset_returns.columns).fillna(0.0)).rename("Equal-weight portfolio")
+    benchmark_returns = build_market_benchmark(raw_df)
+
+    return_frame = pd.concat([optimized_returns, equal_returns, benchmark_returns], axis=1).dropna()
+    value_frame = (1 + return_frame).cumprod() * capital
+    return return_frame, value_frame
+
+
+def build_performance_chart(value_frame: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    colors = {
+        "Optimized portfolio": "#0b6e4f",
+        "Equal-weight portfolio": "#d97706",
+        "Market benchmark": "#1f77b4",
+    }
+
+    for column in value_frame.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=value_frame.index,
+                y=value_frame[column],
+                mode="lines",
+                name=column,
+                line=dict(width=3 if column == "Optimized portfolio" else 2, color=colors.get(column)),
+            )
+        )
+
     fig.update_layout(
+        title="Historical growth of your starting capital",
+        xaxis_title="Date",
+        yaxis_title="Portfolio value ($)",
         height=420,
         margin=dict(l=10, r=10, t=50, b=10),
-        xaxis_title="P/E ratio",
-        yaxis_title="Expected annual return",
     )
     return fig
 
 
+def build_drawdown_chart(value_frame: pd.DataFrame) -> go.Figure:
+    drawdown = value_frame.div(value_frame.cummax()).sub(1.0) * 100
+    fig = go.Figure()
+    colors = {
+        "Optimized portfolio": "#0b6e4f",
+        "Equal-weight portfolio": "#d97706",
+        "Market benchmark": "#1f77b4",
+    }
+
+    for column in drawdown.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=drawdown.index,
+                y=drawdown[column],
+                mode="lines",
+                name=column,
+                line=dict(width=2, color=colors.get(column)),
+            )
+        )
+
+    fig.update_layout(
+        title="Historical drawdown",
+        xaxis_title="Date",
+        yaxis_title="Drawdown (%)",
+        height=360,
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    return fig
+
+
+def build_comparison_table(
+    optimized_metrics: dict,
+    equal_metrics: dict,
+) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "Portfolio": "Optimized portfolio",
+                "Expected Return (%)": optimized_metrics["expected_return"] * 100,
+                "Volatility (%)": optimized_metrics["volatility"] * 100,
+                "Sharpe Ratio": optimized_metrics["sharpe_ratio"],
+            },
+            {
+                "Portfolio": "Equal-weight portfolio",
+                "Expected Return (%)": equal_metrics["expected_return"] * 100,
+                "Volatility (%)": equal_metrics["volatility"] * 100,
+                "Sharpe Ratio": equal_metrics["sharpe_ratio"],
+            },
+        ]
+    )
+
+
+def build_scenario_analysis(portfolio_snapshot: pd.DataFrame, capital: float) -> dict:
+    beta_series = portfolio_snapshot["Rolling Beta"].fillna(1.0)
+    weights = portfolio_snapshot["Weight"].clip(lower=0.0)
+    weighted_beta = np.average(beta_series, weights=weights)
+    market_drop = -0.10
+    portfolio_drop = weighted_beta * market_drop
+    return {
+        "market_drop": market_drop,
+        "portfolio_drop": portfolio_drop,
+        "dollar_impact": capital * portfolio_drop,
+        "beta": weighted_beta,
+    }
+
+
+def build_why_portfolio_points(
+    portfolio_snapshot: pd.DataFrame,
+    sector_df: pd.DataFrame,
+    risk_label: str,
+) -> list[str]:
+    top_holdings = portfolio_snapshot.head(3)
+    top_holdings_text = ", ".join(
+        f"{row['Company']} ({row['Weight (%)']:.1f}%)" for _, row in top_holdings.iterrows()
+    )
+
+    conviction_df = portfolio_snapshot.sort_values(["Predicted Return", "Confidence"], ascending=False).head(3)
+    conviction_text = ", ".join(
+        f"{row['Company']} ({row['Predicted Return']:.1%})" for _, row in conviction_df.iterrows() if pd.notna(row["Predicted Return"])
+    )
+
+    top_sector = sector_df.iloc[0]
+    diversification_text = (
+        f"The portfolio spreads across {sector_df['sector'].nunique()} sectors, with {top_sector['sector']} as the largest exposure at {top_sector['weight'] * 100:.1f}%."
+    )
+
+    points = [f"Top holdings: {top_holdings_text}."]
+    if conviction_text:
+        points.append(
+            f"The model sees the strongest return potential among your holdings in {conviction_text}, which helps explain why they earned meaningful weights."
+        )
+    points.append(f"{diversification_text} That mix is designed to fit a {risk_label.lower()} investor.")
+    return points
+
+
+def build_ml_insights_table(portfolio_snapshot: pd.DataFrame) -> pd.DataFrame:
+    insights = portfolio_snapshot[
+        ["Company", "Ticker", "Weight (%)", "Predicted Return", "Confidence"]
+    ].copy()
+    insights["Predicted Return (%)"] = insights["Predicted Return"] * 100
+    insights["Confidence (%)"] = insights["Confidence"] * 100
+    insights = insights.sort_values(["Weight (%)", "Predicted Return"], ascending=False)
+    insights = insights.drop(columns=["Predicted Return", "Confidence"])
+    return insights.reset_index(drop=True)
+
+
+def render_risk_questionnaire(prices: pd.DataFrame) -> tuple[int | None, str | None, float, bool]:
+    with st.sidebar:
+        st.header("Step 1: Your preferences")
+        st.caption("Answer all five questions. The portfolio refreshes automatically as you change answers or budget.")
+
+        answers: dict[str, int] = {}
+        answered = 0
+        for key, label, options in QUESTIONNAIRE:
+            labels = [option_label for option_label, _ in options]
+            selected = st.radio(label, options=labels, index=None, key=key)
+            if selected is not None:
+                answered += 1
+                answers[key] = dict(options)[selected]
+
+        st.progress(answered / len(QUESTIONNAIRE), text=f"{answered} of {len(QUESTIONNAIRE)} questions answered")
+
+        capital = float(
+            st.number_input(
+                "Budget (USD)",
+                min_value=1000,
+                max_value=10000000,
+                value=10000,
+                step=500,
+                key="capital",
+            )
+        )
+        show_details = st.checkbox("Show technical details", value=False, key="show_details")
+
+        if answered < len(QUESTIONNAIRE):
+            st.info("Finish the questionnaire to see your portfolio.")
+            return None, None, capital, show_details
+
+        risk_score = score_risk_questionnaire(answers)
+        risk_label = RISK_LABELS[risk_score]
+        st.success(f"{risk_label} ({risk_score}/10)")
+        st.caption(RISK_EXPLANATIONS[risk_score])
+
+        st.divider()
+        st.header("Portfolio setup")
+        st.write(f"Budget: **${capital:,.0f}**")
+        st.write(f"Stock universe available: **{prices.shape[1]}**")
+        st.write(f"Data window: **{prices.index.min().date()}** to **{prices.index.max().date()}**")
+
+    return risk_score, risk_label, capital, show_details
+
+
+def render_portfolio_summary(metrics: dict, risk_score: int, risk_label: str, cash_remaining: float):
+    st.subheader("Portfolio Summary")
+    with st.container(border=True):
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Expected annual return", f"{metrics['expected_return']:.1%}", help=METRIC_HELP["expected_return"])
+        c2.metric("Expected volatility", f"{metrics['volatility']:.1%}", help=METRIC_HELP["volatility"])
+        c3.metric("Sharpe ratio", f"{metrics['sharpe_ratio']:.2f}", help=METRIC_HELP["sharpe_ratio"])
+        c4.metric("Risk profile", f"{risk_label} ({risk_score}/10)", help=METRIC_HELP["risk_profile"])
+        st.caption(f"Cash left after rounding to whole shares: ${cash_remaining:,.0f}.")
+
+
+def render_why_portfolio(points: list[str]):
+    st.subheader("Why this portfolio?")
+    st.caption("A simple explanation of why these holdings fit your answers and the model's outlook.")
+    for point in points:
+        st.write(f"- {point}")
+
+
 def main():
-    st.title("📈 Smart Portfolio Builder")
-    st.caption("A fully automated Black-Litterman portfolio app powered by ML signals and S&P 500 stock data.")
+    st.title("Smart Portfolio Builder")
+    st.caption("A guided portfolio experience powered by ML return signals, Black-Litterman optimization, and historical market data.")
 
     with st.spinner("Loading market and feature data..."):
         raw_df, prices, market_caps, sectors = load_base_data()
         _, ml_pred = train_and_predict()
 
+    asset_returns = build_asset_return_panel(raw_df, prices.columns.tolist())
+
     st.markdown(
-        "This app builds a stock portfolio from the available S&P 500-style universe in your dataset. "
-        "It uses historical market data, machine learning return views, and Black-Litterman optimization to recommend a portfolio based on the user's risk profile and budget."
+        "Answer the questionnaire in the left panel to generate a portfolio that matches your risk comfort, "
+        "shows what you would own, and explains how the recommendation compares with simpler alternatives."
     )
 
-    risk_score, risk_label = render_risk_questionnaire()
+    risk_score, risk_label, capital, show_details = render_risk_questionnaire(prices)
     if risk_score is None or risk_label is None:
         st.stop()
-
-    capital = float(st.session_state["capital"])
-    show_details = bool(st.session_state["show_details"])
-
-    with st.sidebar:
-        st.divider()
-        st.header("Portfolio setup")
-        st.write(f"Risk score: **{risk_score}/10**")
-        st.write(f"Risk profile: **{risk_label}**")
-        st.write(f"Budget: **${capital:,.0f}**")
-        st.write(f"Stock universe available: **{prices.shape[1]}**")
-        st.write(f"Data window: **{prices.index.min().date()}** to **{prices.index.max().date()}**")
 
     with st.spinner("Optimizing your portfolio..."):
         result = run_optimization_pipeline(
             prices=prices,
             ml_predictions=ml_pred,
             risk_score=risk_score,
-            capital=float(capital),
+            capital=capital,
             market_caps=market_caps,
+            returns=asset_returns,
+            risk_free_rate=RISK_FREE_RATE,
         )
 
     weights = result["weights"]
     metrics = result["metrics"]
-    allocation_df = add_company_names(result["allocation_df"])
-    sector_df = build_sector_exposure(weights, sectors)
-    weights_df = add_company_names(metrics["weights_df"])
-    company_snapshot = build_company_snapshot(raw_df, weights_df, ml_pred)
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Expected annual return", f"{metrics['expected_return']:.1%}", help=METRIC_HELP["expected_return"])
-    c2.metric("Expected volatility", f"{metrics['volatility']:.1%}", help=METRIC_HELP["volatility"])
-    c3.metric("Sharpe ratio", f"{metrics['sharpe_ratio']:.2f}", help=METRIC_HELP["sharpe_ratio"])
-    c4.metric("Cash left", f"${result['cash_remaining']:,.0f}", help=METRIC_HELP["cash_left"])
-
-    st.success(f"Portfolio built for a **{result['risk_label']}** investor with a **${capital:,.0f}** budget.")
-    st.caption("Tip: hover over the small question-mark icons on the key metrics for a simple explanation.")
-
-    with st.expander("What these results mean", expanded=False):
-        st.write(
-            "The portfolio combines company-level signals, your risk profile, and diversification rules. "
-            "The charts below help you see where your money goes, how concentrated the portfolio is, and what kinds of businesses you would be buying."
-        )
-
-    left, right = st.columns((1.1, 0.9))
-
-    with left:
-        top_holdings = weights_df.query("`Weight (%)` > 0").head(10).copy()
-        top_holdings["Holding"] = top_holdings["Company"] + " (" + top_holdings["Ticker"] + ")"
-        fig_bar = px.bar(
-            top_holdings,
-            x="Holding",
-            y="Weight (%)",
-            title="Top portfolio holdings",
-            text="Weight (%)",
-        )
-        fig_bar.update_traces(textposition="outside")
-        fig_bar.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10))
-        st.plotly_chart(fig_bar, use_container_width=True)
-
-    with right:
-        pie_df = weights_df.query("`Weight (%)` > 0").head(8).copy()
-        pie_df["Holding"] = pie_df["Company"] + " (" + pie_df["Ticker"] + ")"
-        other = max(0.0, 100 - pie_df["Weight (%)"].sum())
-        if other > 0.01:
-            pie_df.loc[len(pie_df)] = {"Company": "Other", "Ticker": "Other", "Weight (%)": other, "Holding": "Other"}
-        fig_pie = px.pie(pie_df, values="Weight (%)", names="Holding", title="Portfolio mix")
-        fig_pie.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10))
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    c5, c6 = st.columns(2)
-    with c5:
-        fig_sector = px.bar(
-            sector_df.assign(weight_pct=sector_df["weight"] * 100),
-            x="sector",
-            y="weight_pct",
-            title="Sector exposure",
-            labels={"weight_pct": "Weight (%)", "sector": "Sector"},
-        )
-        fig_sector.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10))
-        st.plotly_chart(fig_sector, use_container_width=True)
-
-    with c6:
-        st.plotly_chart(build_growth_chart(prices, weights), use_container_width=True)
-
-    c7, c8 = st.columns(2)
-    with c7:
-        st.plotly_chart(build_allocation_chart(company_snapshot), use_container_width=True)
-    with c8:
-        st.plotly_chart(build_company_map(company_snapshot), use_container_width=True)
-
-    st.subheader("What you're buying")
-    st.caption("These are the main companies in your recommended portfolio, along with simple business and valuation context.")
-    company_display = company_snapshot.head(10).copy()
-    company_display["Expected Return"] = company_display["Expected Return"].map(lambda x: f"{x:.1%}" if pd.notna(x) else "N/A")
-    company_display["Model Confidence"] = company_display["Model Confidence"].map(lambda x: f"{x:.0%}" if pd.notna(x) else "N/A")
-    company_display["Weight (%)"] = company_display["Weight (%)"].map(lambda x: f"{x:.2f}%")
-    company_display["Latest Price ($)"] = company_display["Latest Price ($)"].map(lambda x: f"${x:,.2f}" if pd.notna(x) else "N/A")
-    company_display["Allocation ($)"] = company_display["Allocation ($)"].map(lambda x: f"${x:,.0f}")
-    company_display["Market Cap ($)"] = company_display["Market Cap ($)"].map(lambda x: f"${x/1e9:,.1f}B" if pd.notna(x) else "N/A")
-    company_display["P/E Ratio"] = company_display["P/E Ratio"].map(lambda x: f"{x:.1f}" if pd.notna(x) else "N/A")
-    st.dataframe(
-        company_display[
-            [
-                "Company",
-                "Ticker",
-                "Sector",
-                "Weight (%)",
-                "Allocation ($)",
-                "Latest Price ($)",
-                "Market Cap ($)",
-                "P/E Ratio",
-                "Expected Return",
-                "Model Confidence",
-            ]
-        ],
-        use_container_width=True,
-        hide_index=True,
+    equal_weights = pd.Series(1.0 / len(weights), index=weights.index)
+    equal_metrics = compute_portfolio_metrics(
+        equal_weights,
+        result["bl_returns"],
+        result["cov_matrix"],
+        risk_free_rate=RISK_FREE_RATE,
     )
 
-    st.subheader("Recommended allocation")
-    st.dataframe(allocation_df, use_container_width=True, hide_index=True)
+    portfolio_snapshot = build_portfolio_snapshot(
+        raw_df=raw_df,
+        weights=weights,
+        allocation_df=result["allocation_df"],
+        ml_pred=ml_pred,
+        capital=capital,
+    )
+    display_snapshot = build_display_snapshot(portfolio_snapshot)
+    sector_df = build_sector_exposure(weights, sectors)
+    performance_returns, performance_values = build_performance_frame(
+        optimized_weights=weights,
+        equal_weights=equal_weights,
+        raw_df=raw_df,
+        capital=capital,
+    )
+    comparison_df = build_comparison_table(metrics, equal_metrics)
+    scenario = build_scenario_analysis(portfolio_snapshot, capital)
+    why_points = build_why_portfolio_points(display_snapshot, sector_df, risk_label)
+    ml_insights_df = build_ml_insights_table(display_snapshot)
 
-    csv = allocation_df.to_csv(index=False).encode("utf-8")
+    render_portfolio_summary(metrics, risk_score, risk_label, result["cash_remaining"])
+    if result["target_volatility"] < result["min_feasible_volatility"]:
+        st.caption(
+            f"Note: In this stock-only universe, the lowest achievable volatility is about "
+            f"{result['min_feasible_volatility']:.1%}. For this profile, the app is showing the "
+            f"minimum-volatility stock portfolio rather than an unattainable lower-risk target."
+        )
+
+    st.subheader("Portfolio Composition")
+    st.caption("See where your money is expected to go and which stocks matter most.")
+    comp_left, comp_right = st.columns((1.1, 0.9))
+    with comp_left:
+        st.plotly_chart(build_top_holdings_chart(display_snapshot), use_container_width=True)
+    with comp_right:
+        st.plotly_chart(build_allocation_pie(display_snapshot), use_container_width=True)
+
+    st.plotly_chart(build_sector_chart(sector_df), use_container_width=True)
+    st.caption(build_sector_commentary(sector_df))
+
+    st.subheader("Risk and Performance")
+    st.caption("These visuals show how the portfolio balances opportunity, downside, and historical behavior.")
+
+    risk_left, risk_right = st.columns((1.4, 0.8))
+    with risk_left:
+        st.plotly_chart(
+            build_risk_return_chart(
+                expected_returns=result["bl_returns"],
+                cov_matrix=result["cov_matrix"],
+                optimized_weights=weights,
+                equal_weights=equal_weights,
+            ),
+            use_container_width=True,
+        )
+    with risk_right:
+        st.plotly_chart(build_risk_gauge(metrics["volatility"], risk_score), use_container_width=True)
+        st.caption(
+            f"The red marker shows the top end of the volatility range typically associated with a {risk_label.lower()} profile."
+        )
+
+        with st.container(border=True):
+            st.markdown("**Scenario analysis**")
+            st.write(
+                f"If the broad market drops **10%**, this portfolio is expected to move by roughly **{scenario['portfolio_drop']:.1%}** "
+                f"based on its weighted beta of **{scenario['beta']:.2f}**."
+            )
+            st.caption(f"Estimated impact on a ${capital:,.0f} portfolio: ${scenario['dollar_impact']:,.0f}.")
+
+    st.plotly_chart(build_performance_chart(performance_values), use_container_width=True)
+    st.caption(
+        "Historical simulation applies today's portfolio weights to past daily returns. "
+        "The benchmark line uses the market return series available in the dataset as a broad-market proxy."
+    )
+    st.caption(
+        "Disclosure: Past performance does not guarantee future results. This chart is illustrative only "
+        "and is meant to show how the current portfolio mix would have behaved in past market conditions, "
+        "not to predict future returns."
+    )
+
+    compare_left, compare_right = st.columns((1.1, 0.9))
+    with compare_left:
+        st.plotly_chart(build_drawdown_chart(performance_values), use_container_width=True)
+    with compare_right:
+        st.markdown("**Optimized vs equal-weight**")
+        st.dataframe(
+            comparison_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Expected Return (%)": st.column_config.NumberColumn("Expected Return (%)", format="%.2f%%"),
+                "Volatility (%)": st.column_config.NumberColumn("Volatility (%)", format="%.2f%%"),
+                "Sharpe Ratio": st.column_config.NumberColumn("Sharpe Ratio", format="%.2f"),
+            },
+        )
+
+    render_why_portfolio(why_points)
+
+    st.subheader("Allocation Table")
+    st.caption("Click any column header to sort. Download the table if you want to review it outside the app.")
+    allocation_display = portfolio_snapshot[
+        ["Company", "Ticker", "Sector", "Weight (%)", "Allocation ($)", "Shares", "Price ($)"]
+    ].copy()
+    allocation_display = allocation_display[allocation_display["Allocation ($)"] > 0].reset_index(drop=True)
+    st.dataframe(
+        allocation_display,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Weight (%)": st.column_config.NumberColumn("Weight (%)", format="%.2f%%"),
+            "Allocation ($)": st.column_config.NumberColumn("Dollar Allocation", format="$%.2f"),
+            "Shares": st.column_config.NumberColumn("Shares", format="%d"),
+            "Price ($)": st.column_config.NumberColumn("Price", format="$%.2f"),
+        },
+    )
+
+    csv = allocation_display.to_csv(index=False).encode("utf-8")
     st.download_button(
         "Download allocation as CSV",
         data=csv,
@@ -458,22 +823,81 @@ def main():
         mime="text/csv",
     )
 
-    if show_details:
-        st.subheader("Technical details")
-        c9, c10 = st.columns(2)
-        with c9:
-            st.write("**Black-Litterman posterior returns**")
-            st.dataframe(result["bl_returns"].sort_values(ascending=False).rename("posterior_return"))
-        with c10:
-            st.write("**ML views used as inputs**")
-            ml_views_df = ml_pred.sort_values("return", ascending=False).copy()
-            ml_views_df.insert(1, "company", ml_views_df["ticker"].map(lambda ticker: COMPANY_NAMES.get(ticker, ticker)))
-            st.dataframe(ml_views_df, use_container_width=True, hide_index=True)
+    st.subheader("ML Insights")
+    st.caption("Higher confidence means the model's tree-based predictions agree more closely for that stock.")
+    st.dataframe(
+        ml_insights_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Weight (%)": st.column_config.NumberColumn("Weight (%)", format="%.2f%%"),
+            "Predicted Return (%)": st.column_config.NumberColumn("Predicted Return (%)", format="%.2f%%"),
+            "Confidence (%)": st.column_config.NumberColumn("Confidence (%)", format="%.0f%%"),
+        },
+    )
 
-        st.write("**Universe snapshot**")
-        latest_snapshot = raw_df.sort_values("date").groupby("ticker").tail(1)[["ticker", "sector", "prc", "mkt_cap", "pe_ratio"]]
-        latest_snapshot.insert(1, "company", latest_snapshot["ticker"].map(lambda ticker: COMPANY_NAMES.get(ticker, ticker)))
-        st.dataframe(latest_snapshot.sort_values("mkt_cap", ascending=False), use_container_width=True, hide_index=True)
+    if show_details:
+        with st.expander("Technical details", expanded=False):
+            st.write("**Black-Litterman posterior returns**")
+            st.dataframe(
+                result["bl_returns"].sort_values(ascending=False).rename("posterior_return"),
+                use_container_width=True,
+            )
+
+            st.write("**Views used in the optimization**")
+            views_used_display = result["views_used"].copy()
+            views_used_display["View Return (%)"] = views_used_display["return"] * 100
+            views_used_display["Confidence (%)"] = views_used_display["confidence"] * 100
+            views_used_display = views_used_display.drop(columns=["return", "confidence"])
+            st.dataframe(
+                views_used_display.sort_values("View Return (%)", ascending=False),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "View Return (%)": st.column_config.NumberColumn("View Return (%)", format="%.2f%%"),
+                    "Confidence (%)": st.column_config.NumberColumn("Confidence (%)", format="%.0f%%"),
+                },
+            )
+
+            st.write("**Full ML prediction table**")
+            full_ml_df = ml_pred.sort_values("return", ascending=False).copy()
+            full_ml_df.insert(1, "company", full_ml_df["ticker"].map(add_company_name))
+            full_ml_df["Predicted Return (%)"] = full_ml_df["return"] * 100
+            full_ml_df["Confidence (%)"] = full_ml_df["confidence"] * 100
+            full_ml_display = full_ml_df.drop(columns=["return", "confidence"])
+            st.dataframe(
+                full_ml_display,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Predicted Return (%)": st.column_config.NumberColumn("Predicted Return (%)", format="%.2f%%"),
+                    "Confidence (%)": st.column_config.NumberColumn("Confidence (%)", format="%.0f%%"),
+                },
+            )
+
+            st.write("**Historical return summary**")
+            realized_stats = pd.DataFrame(
+                {
+                    "Series": performance_returns.columns,
+                    "Annualized Return (%)": [
+                        ((1 + performance_returns[col]).prod() ** (252 / len(performance_returns[col])) - 1) * 100
+                        for col in performance_returns.columns
+                    ],
+                    "Annualized Volatility (%)": [
+                        performance_returns[col].std() * np.sqrt(252) * 100
+                        for col in performance_returns.columns
+                    ],
+                }
+            )
+            st.dataframe(
+                realized_stats,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Annualized Return (%)": st.column_config.NumberColumn("Annualized Return (%)", format="%.2f%%"),
+                    "Annualized Volatility (%)": st.column_config.NumberColumn("Annualized Volatility (%)", format="%.2f%%"),
+                },
+            )
 
 
 if __name__ == "__main__":
