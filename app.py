@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import numpy as np
@@ -20,12 +21,35 @@ from src.black_litterman import (
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_PATH = BASE_DIR / "data" / "features.parquet"
+LOGO_PATH = BASE_DIR / "Logo.png"
 RISK_FREE_RATE = 0.045
 RANDOM_PORTFOLIO_COUNT = 350
 
+BRAND_COLORS = {
+    "bg": "#040816",
+    "panel": "#0A142B",
+    "panel_alt": "#081227",
+    "text": "#F5F7FB",
+    "muted": "#9CB2CC",
+    "teal": "#20E3D2",
+    "blue": "#2488FF",
+    "blue_soft": "#67B7FF",
+    "slate": "#90A6C2",
+    "rose": "#FF6B86",
+}
+CHART_COLOR_SEQUENCE = [
+    BRAND_COLORS["teal"],
+    BRAND_COLORS["blue"],
+    BRAND_COLORS["blue_soft"],
+    "#9DEDE7",
+    "#4C9EFF",
+    "#B6C7DB",
+]
+PLOTLY_FONT_FAMILY = '"Segoe UI Variable Display", Aptos, "Trebuchet MS", sans-serif'
+
 st.set_page_config(
-    page_title="Smart Portfolio Builder",
-    page_icon=":chart_with_upwards_trend:",
+    page_title="BL Portfolio",
+    page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else ":chart_with_upwards_trend:",
     layout="wide",
 )
 
@@ -132,6 +156,381 @@ METRIC_HELP = {
     "risk_profile": "This is the investor profile created from your questionnaire. Higher scores aim for more growth and accept more risk.",
     "cash_left": "This is the part of your budget that stays uninvested after rounding down to whole shares.",
 }
+
+
+@st.cache_data(show_spinner=False)
+def load_logo_base64() -> str | None:
+    if not LOGO_PATH.exists():
+        return None
+    return base64.b64encode(LOGO_PATH.read_bytes()).decode("utf-8")
+
+
+def inject_brand_theme():
+    css = """
+    <style>
+    :root {
+        --brand-bg: __BG__;
+        --brand-panel: __PANEL__;
+        --brand-panel-alt: __PANEL_ALT__;
+        --brand-text: __TEXT__;
+        --brand-muted: __MUTED__;
+        --brand-teal: __TEAL__;
+        --brand-blue: __BLUE__;
+        --brand-blue-soft: __BLUE_SOFT__;
+        --brand-slate: __SLATE__;
+        --brand-rose: __ROSE__;
+        --brand-border: rgba(71, 163, 255, 0.22);
+        --brand-glow: 0 22px 55px rgba(0, 0, 0, 0.34);
+    }
+
+    .stApp {
+        background:
+            radial-gradient(circle at 15% 0%, rgba(36, 136, 255, 0.24), transparent 28%),
+            radial-gradient(circle at 88% 4%, rgba(32, 227, 210, 0.18), transparent 24%),
+            linear-gradient(180deg, #030712 0%, #050b18 45%, #030712 100%);
+        color: var(--brand-text);
+        font-family: "Segoe UI Variable Display", Aptos, "Trebuchet MS", sans-serif;
+    }
+
+    .stApp [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, rgba(9, 18, 38, 0.98) 0%, rgba(5, 12, 24, 0.98) 100%);
+        border-right: 1px solid rgba(78, 139, 255, 0.18);
+    }
+
+    .stApp [data-testid="stSidebar"] * {
+        color: var(--brand-text);
+    }
+
+    .stApp h1,
+    .stApp h2,
+    .stApp h3 {
+        color: var(--brand-text);
+        font-family: Bahnschrift, "Segoe UI Variable Display", Aptos, sans-serif;
+        letter-spacing: -0.03em;
+    }
+
+    .stApp p,
+    .stApp label,
+    .stApp .stCaption,
+    .stApp small {
+        color: #d7e3f4;
+    }
+
+    .stApp [data-testid="stMetric"] {
+        background: linear-gradient(180deg, rgba(12, 26, 52, 0.88) 0%, rgba(7, 15, 29, 0.96) 100%);
+        border: 1px solid rgba(81, 177, 255, 0.22);
+        border-radius: 20px;
+        padding: 1rem 1.1rem;
+        box-shadow: var(--brand-glow);
+    }
+
+    .stApp [data-testid="stMetricLabel"] {
+        color: var(--brand-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+
+    .stApp [data-testid="stMetricValue"] {
+        color: var(--brand-text);
+    }
+
+    .stApp [data-testid="stVerticalBlockBorderWrapper"] {
+        background: linear-gradient(180deg, rgba(10, 20, 43, 0.8) 0%, rgba(4, 10, 24, 0.94) 100%);
+        border: 1px solid rgba(71, 163, 255, 0.18);
+        border-radius: 22px;
+        box-shadow: var(--brand-glow);
+    }
+
+    .stApp [data-testid="stDataFrame"] {
+        background: linear-gradient(180deg, rgba(10, 20, 43, 0.74) 0%, rgba(4, 10, 24, 0.92) 100%);
+        border: 1px solid rgba(71, 163, 255, 0.18);
+        border-radius: 20px;
+        overflow: hidden;
+    }
+
+    .stApp .stButton > button,
+    .stApp .stDownloadButton > button {
+        background: linear-gradient(90deg, var(--brand-teal) 0%, var(--brand-blue) 100%);
+        color: #03111f;
+        border: 0;
+        border-radius: 999px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        box-shadow: 0 12px 26px rgba(36, 136, 255, 0.25);
+        transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+    }
+
+    .stApp .stButton > button:hover,
+    .stApp .stDownloadButton > button:hover {
+        filter: brightness(1.05);
+        transform: translateY(-1px);
+        box-shadow: 0 16px 32px rgba(36, 136, 255, 0.32);
+    }
+
+    .stApp .stNumberInput input,
+    .stApp .stTextInput input,
+    .stApp [data-baseweb="select"] > div,
+    .stApp .stTextArea textarea {
+        background: rgba(7, 16, 31, 0.88);
+        color: var(--brand-text);
+        border: 1px solid rgba(71, 163, 255, 0.22);
+        border-radius: 14px;
+    }
+
+    .stApp [data-baseweb="radio"] > div {
+        gap: 0.4rem;
+    }
+
+    .stApp [data-baseweb="radio"] label {
+        background: rgba(10, 20, 43, 0.7);
+        border: 1px solid rgba(71, 163, 255, 0.16);
+        border-radius: 14px;
+        padding: 0.45rem 0.65rem;
+    }
+
+    .stApp [data-testid="stProgressBar"] > div > div {
+        background: linear-gradient(90deg, var(--brand-teal) 0%, var(--brand-blue) 100%);
+    }
+
+    .brand-hero {
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+        padding: 1.8rem 2rem;
+        margin: 0.25rem 0 1.1rem;
+        border-radius: 28px;
+        border: 1px solid rgba(75, 171, 255, 0.22);
+        background: linear-gradient(135deg, rgba(7, 14, 30, 0.96) 0%, rgba(8, 18, 39, 0.85) 55%, rgba(4, 9, 22, 0.95) 100%);
+        box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+    }
+
+    .brand-hero::before {
+        content: "";
+        position: absolute;
+        inset: -30% auto auto -5%;
+        width: 340px;
+        height: 340px;
+        background: radial-gradient(circle, rgba(32, 227, 210, 0.18) 0%, rgba(32, 227, 210, 0.0) 70%);
+        pointer-events: none;
+    }
+
+    .brand-hero::after {
+        content: "";
+        position: absolute;
+        right: -90px;
+        bottom: -120px;
+        width: 320px;
+        height: 320px;
+        background: radial-gradient(circle, rgba(36, 136, 255, 0.2) 0%, rgba(36, 136, 255, 0.0) 72%);
+        pointer-events: none;
+    }
+
+    .brand-hero__copy,
+    .brand-hero__visual {
+        position: relative;
+        z-index: 1;
+    }
+
+    .brand-hero__copy {
+        flex: 1 1 420px;
+        max-width: 740px;
+    }
+
+    .brand-hero__kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.35rem 0.8rem;
+        margin-bottom: 1rem;
+        border-radius: 999px;
+        border: 1px solid rgba(32, 227, 210, 0.24);
+        background: rgba(32, 227, 210, 0.08);
+        color: #bffcf4;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+    }
+
+    .brand-hero__copy h1 {
+        margin: 0;
+        font-size: clamp(2.3rem, 5vw, 3.8rem);
+        line-height: 0.95;
+    }
+
+    .brand-hero__copy p {
+        max-width: 56rem;
+        margin: 1rem 0 0;
+        color: #d0dcf0;
+        font-size: 1.02rem;
+        line-height: 1.65;
+    }
+
+    .brand-hero__pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.7rem;
+        margin-top: 1.25rem;
+    }
+
+    .brand-hero__pills span {
+        padding: 0.5rem 0.95rem;
+        border-radius: 999px;
+        border: 1px solid rgba(71, 163, 255, 0.22);
+        background: rgba(9, 20, 42, 0.74);
+        color: #dbecff;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    .brand-hero__visual {
+        flex: 0 1 330px;
+        margin: 0 auto;
+        text-align: center;
+    }
+
+    .brand-hero__visual img {
+        width: min(100%, 320px);
+        filter: drop-shadow(0 24px 45px rgba(0, 0, 0, 0.42));
+    }
+
+    .brand-note {
+        margin: 0.35rem 0 1.6rem;
+        padding: 0.85rem 1rem;
+        border-radius: 16px;
+        background: rgba(7, 16, 31, 0.74);
+        border: 1px solid rgba(71, 163, 255, 0.16);
+        color: #cddbed;
+    }
+
+    @media (max-width: 900px) {
+        .brand-hero {
+            padding: 1.35rem 1.2rem;
+        }
+
+        .brand-hero__visual {
+            order: -1;
+            flex-basis: 100%;
+        }
+
+        .brand-hero__copy h1 {
+            font-size: clamp(2rem, 10vw, 3rem);
+        }
+    }
+    </style>
+    """
+
+    replacements = {
+        "__BG__": BRAND_COLORS["bg"],
+        "__PANEL__": BRAND_COLORS["panel"],
+        "__PANEL_ALT__": BRAND_COLORS["panel_alt"],
+        "__TEXT__": BRAND_COLORS["text"],
+        "__MUTED__": BRAND_COLORS["muted"],
+        "__TEAL__": BRAND_COLORS["teal"],
+        "__BLUE__": BRAND_COLORS["blue"],
+        "__BLUE_SOFT__": BRAND_COLORS["blue_soft"],
+        "__SLATE__": BRAND_COLORS["slate"],
+        "__ROSE__": BRAND_COLORS["rose"],
+    }
+    for token, value in replacements.items():
+        css = css.replace(token, value)
+
+    st.markdown(css, unsafe_allow_html=True)
+
+
+def render_app_hero():
+    logo_base64 = load_logo_base64()
+    logo_markup = ""
+    if logo_base64:
+        logo_markup = f'<img src="data:image/png;base64,{logo_base64}" alt="BL Portfolio logo">'
+
+    st.markdown(
+        f"""
+        <section class="brand-hero">
+            <div class="brand-hero__copy">
+                <div class="brand-hero__kicker">BL Portfolio</div>
+                <h1>Smart Portfolio Builder</h1>
+                <p>
+                    A tech-forward investing workspace powered by ML return signals, Black-Litterman optimization,
+                    and historical market data.
+                </p>
+                <div class="brand-hero__pills">
+                    <span>Smart insights</span>
+                    <span>Optimized returns</span>
+                    <span>Live risk fit</span>
+                </div>
+            </div>
+            <div class="brand-hero__visual">
+                {logo_markup}
+            </div>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def apply_brand_chart_layout(
+    fig: go.Figure,
+    *,
+    height: int,
+    margin: dict | None = None,
+) -> go.Figure:
+    fig.update_layout(
+        template="plotly_dark",
+        height=height,
+        margin=margin or dict(l=10, r=10, t=50, b=10),
+        paper_bgcolor="rgba(0, 0, 0, 0)",
+        plot_bgcolor="rgba(8, 18, 39, 0.62)",
+        font=dict(color=BRAND_COLORS["text"], family=PLOTLY_FONT_FAMILY),
+        title=dict(font=dict(size=20, color=BRAND_COLORS["text"])),
+        colorway=CHART_COLOR_SEQUENCE,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            bgcolor="rgba(0, 0, 0, 0)",
+            font=dict(color="#D6E4F5"),
+        ),
+        hovermode="closest",
+        hoverlabel=dict(
+            bgcolor=BRAND_COLORS["panel_alt"],
+            font_color=BRAND_COLORS["text"],
+            bordercolor=BRAND_COLORS["teal"],
+        ),
+        coloraxis_colorbar=dict(
+            bgcolor="rgba(0, 0, 0, 0)",
+            outlinecolor="rgba(121, 182, 255, 0.25)",
+            tickfont=dict(color="#D6E4F5"),
+            title_font=dict(color=BRAND_COLORS["text"]),
+        ),
+    )
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="rgba(104, 142, 191, 0.16)",
+        linecolor="rgba(104, 142, 191, 0.28)",
+        tickfont=dict(color="#B8CCE5"),
+        title_font=dict(color="#DDE8F6"),
+        zeroline=False,
+        showline=True,
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="rgba(104, 142, 191, 0.16)",
+        linecolor="rgba(104, 142, 191, 0.28)",
+        tickfont=dict(color="#B8CCE5"),
+        title_font=dict(color="#DDE8F6"),
+        zeroline=False,
+        showline=True,
+    )
+    return fig
 
 
 @st.cache_data
@@ -255,6 +654,7 @@ def build_top_holdings_chart(portfolio_snapshot: pd.DataFrame) -> go.Figure:
         x="Holding",
         y="Weight (%)",
         color="Sector",
+        color_discrete_sequence=CHART_COLOR_SEQUENCE,
         text="Weight (%)",
         title="Top 10 holdings by portfolio weight",
         hover_data={
@@ -265,9 +665,13 @@ def build_top_holdings_chart(portfolio_snapshot: pd.DataFrame) -> go.Figure:
             "Holding": False,
         },
     )
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-    fig.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10), xaxis_title="")
-    return fig
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        marker_line=dict(color="rgba(3, 17, 31, 0.9)", width=1.1),
+    )
+    fig.update_layout(xaxis_title="")
+    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
 
 
 def build_allocation_pie(portfolio_snapshot: pd.DataFrame) -> go.Figure:
@@ -296,9 +700,14 @@ def build_allocation_pie(portfolio_snapshot: pd.DataFrame) -> go.Figure:
         names="Holding",
         title="Allocation mix",
         hole=0.35,
+        color_discrete_sequence=CHART_COLOR_SEQUENCE,
     )
-    fig.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10))
-    return fig
+    fig.update_traces(
+        textfont_color=BRAND_COLORS["text"],
+        marker=dict(line=dict(color=BRAND_COLORS["panel_alt"], width=1.4)),
+        hovertemplate="%{label}<br>%{value:.1f}% of portfolio<extra></extra>",
+    )
+    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
 
 
 def build_sector_chart(sector_df: pd.DataFrame) -> go.Figure:
@@ -307,13 +716,23 @@ def build_sector_chart(sector_df: pd.DataFrame) -> go.Figure:
         chart_df,
         x="sector",
         y="weight_pct",
+        color="weight_pct",
+        color_continuous_scale=[
+            [0.0, BRAND_COLORS["blue"]],
+            [0.5, BRAND_COLORS["blue_soft"]],
+            [1.0, BRAND_COLORS["teal"]],
+        ],
         text="weight_pct",
         title="Sector exposure",
         labels={"sector": "Sector", "weight_pct": "Weight (%)"},
     )
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-    fig.update_layout(height=380, margin=dict(l=10, r=10, t=50, b=10))
-    return fig
+    fig.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        marker_line=dict(color="rgba(3, 17, 31, 0.9)", width=1.1),
+    )
+    fig.update_layout(coloraxis_showscale=False)
+    return apply_brand_chart_layout(fig, height=380, margin=dict(l=10, r=10, t=50, b=10))
 
 
 def build_risk_gauge(volatility: float, risk_score: int) -> go.Figure:
@@ -323,26 +742,28 @@ def build_risk_gauge(volatility: float, risk_score: int) -> go.Figure:
         go.Indicator(
             mode="gauge+number",
             value=volatility * 100,
-            number={"suffix": "%", "valueformat": ".1f"},
-            title={"text": "Expected volatility"},
+            number={"suffix": "%", "valueformat": ".1f", "font": {"color": BRAND_COLORS["text"]}},
+            title={"text": "Expected volatility", "font": {"size": 20, "color": BRAND_COLORS["text"]}},
             gauge={
                 "axis": {"range": [0, max_axis]},
-                "bar": {"color": "#1f77b4"},
+                "bar": {"color": BRAND_COLORS["teal"]},
+                "bgcolor": "rgba(0, 0, 0, 0)",
+                "bordercolor": "rgba(71, 163, 255, 0.18)",
+                "borderwidth": 1,
                 "steps": [
-                    {"range": [0, max_axis * 0.4], "color": "#d8f3dc"},
-                    {"range": [max_axis * 0.4, max_axis * 0.7], "color": "#ffe8a1"},
-                    {"range": [max_axis * 0.7, max_axis], "color": "#f8c7c7"},
+                    {"range": [0, max_axis * 0.4], "color": "rgba(36, 136, 255, 0.16)"},
+                    {"range": [max_axis * 0.4, max_axis * 0.7], "color": "rgba(103, 183, 255, 0.18)"},
+                    {"range": [max_axis * 0.7, max_axis], "color": "rgba(255, 107, 134, 0.18)"},
                 ],
                 "threshold": {
-                    "line": {"color": "#d62728", "width": 4},
+                    "line": {"color": BRAND_COLORS["rose"], "width": 4},
                     "thickness": 0.8,
                     "value": threshold,
                 },
             },
         )
     )
-    fig.update_layout(height=320, margin=dict(l=20, r=20, t=60, b=10))
-    return fig
+    return apply_brand_chart_layout(fig, height=320, margin=dict(l=20, r=20, t=60, b=10))
 
 
 def build_random_portfolios(
@@ -384,11 +805,16 @@ def build_risk_return_chart(
         x="Volatility",
         y="Return",
         color="Sharpe",
-        color_continuous_scale="Viridis",
+        color_continuous_scale=[
+            [0.0, "#0B1730"],
+            [0.5, BRAND_COLORS["blue"]],
+            [1.0, BRAND_COLORS["teal"]],
+        ],
         title="Risk vs return",
         labels={"Volatility": "Expected volatility (%)", "Return": "Expected return (%)"},
         opacity=0.45,
     )
+    fig.update_traces(marker=dict(size=9, line=dict(width=0)))
 
     optimized_metrics = compute_portfolio_metrics(
         optimized_weights,
@@ -404,8 +830,8 @@ def build_risk_return_chart(
     )
 
     points = [
-        ("Optimized portfolio", optimized_metrics, "#0b6e4f"),
-        ("Equal-weight portfolio", equal_metrics, "#d97706"),
+        ("Optimized portfolio", optimized_metrics, BRAND_COLORS["teal"]),
+        ("Equal-weight portfolio", equal_metrics, BRAND_COLORS["blue_soft"]),
     ]
 
     for name, metrics, color in points:
@@ -417,13 +843,13 @@ def build_risk_return_chart(
                 name=name,
                 text=[name],
                 textposition="top center",
-                marker=dict(size=14, color=color, line=dict(width=2, color="white")),
+                marker=dict(size=14, color=color, line=dict(width=2, color=BRAND_COLORS["panel_alt"])),
+                textfont=dict(color=BRAND_COLORS["text"]),
                 hovertemplate=f"{name}<br>Return: %{{y:.1f}}%<br>Volatility: %{{x:.1f}}%<extra></extra>",
             )
         )
 
-    fig.update_layout(height=420, margin=dict(l=10, r=10, t=50, b=10))
-    return fig
+    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
 
 
 def build_market_benchmark(raw_df: pd.DataFrame) -> pd.Series:
@@ -465,9 +891,9 @@ def build_performance_frame(
 def build_performance_chart(value_frame: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     colors = {
-        "Optimized portfolio": "#0b6e4f",
-        "Equal-weight portfolio": "#d97706",
-        "Market benchmark": "#1f77b4",
+        "Optimized portfolio": BRAND_COLORS["teal"],
+        "Equal-weight portfolio": BRAND_COLORS["blue_soft"],
+        "Market benchmark": BRAND_COLORS["slate"],
     }
 
     for column in value_frame.columns:
@@ -485,19 +911,17 @@ def build_performance_chart(value_frame: pd.DataFrame) -> go.Figure:
         title="Historical growth of your starting capital",
         xaxis_title="Date",
         yaxis_title="Portfolio value ($)",
-        height=420,
-        margin=dict(l=10, r=10, t=50, b=10),
     )
-    return fig
+    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
 
 
 def build_drawdown_chart(value_frame: pd.DataFrame) -> go.Figure:
     drawdown = value_frame.div(value_frame.cummax()).sub(1.0) * 100
     fig = go.Figure()
     colors = {
-        "Optimized portfolio": "#0b6e4f",
-        "Equal-weight portfolio": "#d97706",
-        "Market benchmark": "#1f77b4",
+        "Optimized portfolio": BRAND_COLORS["teal"],
+        "Equal-weight portfolio": BRAND_COLORS["blue_soft"],
+        "Market benchmark": BRAND_COLORS["slate"],
     }
 
     for column in drawdown.columns:
@@ -515,10 +939,8 @@ def build_drawdown_chart(value_frame: pd.DataFrame) -> go.Figure:
         title="Historical drawdown",
         xaxis_title="Date",
         yaxis_title="Drawdown (%)",
-        height=360,
-        margin=dict(l=10, r=10, t=50, b=10),
     )
-    return fig
+    return apply_brand_chart_layout(fig, height=360, margin=dict(l=10, r=10, t=50, b=10))
 
 
 def build_comparison_table(
@@ -599,6 +1021,8 @@ def build_ml_insights_table(portfolio_snapshot: pd.DataFrame) -> pd.DataFrame:
 
 def render_risk_questionnaire(prices: pd.DataFrame) -> tuple[int | None, str | None, float, bool]:
     with st.sidebar:
+        if LOGO_PATH.exists():
+            st.image(str(LOGO_PATH), width=180)
         st.header("Step 1: Your preferences")
         st.caption("Answer all five questions. The portfolio refreshes automatically as you change answers or budget.")
 
@@ -662,8 +1086,8 @@ def render_why_portfolio(points: list[str]):
 
 
 def main():
-    st.title("Smart Portfolio Builder")
-    st.caption("A guided portfolio experience powered by ML return signals, Black-Litterman optimization, and historical market data.")
+    inject_brand_theme()
+    render_app_hero()
 
     with st.spinner("Loading market and feature data..."):
         raw_df, prices, market_caps, sectors = load_base_data()
@@ -672,8 +1096,13 @@ def main():
     asset_returns = build_asset_return_panel(raw_df, prices.columns.tolist())
 
     st.markdown(
-        "Answer the questionnaire in the left panel to generate a portfolio that matches your risk comfort, "
-        "shows what you would own, and explains how the recommendation compares with simpler alternatives."
+        """
+        <div class="brand-note">
+            Answer the questionnaire in the left panel to generate a portfolio that matches your risk comfort,
+            shows what you would own, and explains how the recommendation compares with simpler alternatives.
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     risk_score, risk_label, capital, show_details = render_risk_questionnaire(prices)
