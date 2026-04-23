@@ -158,8 +158,6 @@ METRIC_HELP = {
     "cash_left": "This is the part of your budget that stays uninvested after rounding down to whole shares.",
 }
 
-
-@st.cache_data(show_spinner=False)
 def load_logo_base64() -> str | None:
     if not LOGO_PATH.exists():
         return None
@@ -321,6 +319,13 @@ def inject_brand_theme():
         box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
     }
 
+    .brand-hero--compact {
+        gap: 0.9rem;
+        padding: 1rem 1.35rem;
+        margin-bottom: 0.75rem;
+        border-radius: 22px;
+    }
+
     .brand-hero::before {
         content: "";
         position: absolute;
@@ -413,6 +418,34 @@ def inject_brand_theme():
         filter: drop-shadow(0 24px 45px rgba(0, 0, 0, 0.42));
     }
 
+    .brand-hero--compact .brand-hero__copy {
+        max-width: 560px;
+    }
+
+    .brand-hero--compact .brand-hero__kicker {
+        margin-bottom: 0.45rem;
+        padding: 0.28rem 0.7rem;
+        font-size: 0.72rem;
+    }
+
+    .brand-hero--compact .brand-hero__copy h1 {
+        font-size: clamp(1.55rem, 3vw, 2.2rem);
+        line-height: 1.02;
+    }
+
+    .brand-hero--compact .brand-hero__copy p,
+    .brand-hero--compact .brand-hero__pills {
+        display: none;
+    }
+
+    .brand-hero--compact .brand-hero__visual {
+        flex: 0 1 250px;
+    }
+
+    .brand-hero--compact .brand-hero__visual img {
+        width: min(100%, 250px);
+    }
+
     .brand-note {
         margin: 0.35rem 0 1.6rem;
         padding: 0.85rem 1rem;
@@ -434,6 +467,14 @@ def inject_brand_theme():
 
         .brand-hero__copy h1 {
             font-size: clamp(2rem, 10vw, 3rem);
+        }
+
+        .brand-hero--compact .brand-hero__visual {
+            flex-basis: 100%;
+        }
+
+        .brand-hero--compact .brand-hero__visual img {
+            width: min(100%, 220px);
         }
     }
     </style>
@@ -457,15 +498,16 @@ def inject_brand_theme():
     st.markdown(css, unsafe_allow_html=True)
 
 
-def render_app_hero():
+def render_app_hero(*, compact: bool = False):
     logo_base64 = load_logo_base64()
     logo_markup = ""
     if logo_base64:
         logo_markup = f'<img src="data:image/png;base64,{logo_base64}" alt="AllocateIQ logo">'
+    hero_class = "brand-hero brand-hero--compact" if compact else "brand-hero"
 
     st.markdown(
         f"""
-        <section class="brand-hero">
+        <section class="{hero_class}">
             <div class="brand-hero__copy">
                 <div class="brand-hero__kicker">AllocateIQ</div>
                 <h1>Smart Portfolio Builder</h1>
@@ -486,6 +528,10 @@ def render_app_hero():
         """,
         unsafe_allow_html=True,
     )
+
+
+def questionnaire_is_complete() -> bool:
+    return all(st.session_state.get(key) is not None for key, _, _ in QUESTIONNAIRE)
 
 
 def apply_brand_chart_layout(
@@ -1101,7 +1147,7 @@ def render_why_portfolio(points: list[str]):
 
 def main():
     inject_brand_theme()
-    render_app_hero()
+    render_app_hero(compact=questionnaire_is_complete())
 
     with st.spinner("Loading market and feature data..."):
         raw_df, prices, market_caps, sectors = load_base_data()
