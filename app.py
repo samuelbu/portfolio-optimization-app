@@ -26,24 +26,28 @@ RISK_FREE_RATE = 0.045
 RANDOM_PORTFOLIO_COUNT = 350
 
 BRAND_COLORS = {
-    "bg": "#040816",
-    "panel": "#0A142B",
-    "panel_alt": "#081227",
-    "text": "#F5F7FB",
-    "muted": "#9CB2CC",
-    "teal": "#20E3D2",
+    "bg": "#F5F9FF",
+    "panel": "#FFFFFF",
+    "panel_alt": "#EEF5FF",
+    "text": "#10213A",
+    "muted": "#5F7391",
+    "teal": "#18CDBE",
     "blue": "#2488FF",
-    "blue_soft": "#67B7FF",
-    "slate": "#90A6C2",
+    "blue_soft": "#6EB8FF",
+    "slate": "#7187A4",
     "rose": "#FF6B86",
 }
 CHART_COLOR_SEQUENCE = [
     BRAND_COLORS["teal"],
+    "#F97316",
     BRAND_COLORS["blue"],
-    BRAND_COLORS["blue_soft"],
-    "#9DEDE7",
-    "#4C9EFF",
-    "#B6C7DB",
+    "#7C3AED",
+    "#EF4444",
+    "#22C55E",
+    "#EAB308",
+    "#EC4899",
+    "#14B8A6",
+    "#6366F1",
 ]
 PLOTLY_FONT_FAMILY = '"Segoe UI Variable Display", Aptos, "Trebuchet MS", sans-serif'
 
@@ -178,34 +182,50 @@ def inject_brand_theme():
         --brand-blue-soft: __BLUE_SOFT__;
         --brand-slate: __SLATE__;
         --brand-rose: __ROSE__;
-        --brand-border: rgba(71, 163, 255, 0.22);
-        --brand-glow: 0 22px 55px rgba(0, 0, 0, 0.34);
+        --brand-border: rgba(36, 136, 255, 0.12);
+        --brand-glow: 0 20px 45px rgba(18, 39, 74, 0.08);
     }
 
     .stApp {
         background:
-            radial-gradient(circle at 15% 0%, rgba(36, 136, 255, 0.24), transparent 28%),
-            radial-gradient(circle at 88% 4%, rgba(32, 227, 210, 0.18), transparent 24%),
-            linear-gradient(180deg, #030712 0%, #050b18 45%, #030712 100%);
+            radial-gradient(circle at 10% 0%, rgba(36, 136, 255, 0.12), transparent 24%),
+            radial-gradient(circle at 92% 6%, rgba(24, 205, 190, 0.12), transparent 22%),
+            linear-gradient(180deg, #f8fbff 0%, #f3f8ff 44%, #eef5ff 100%);
         color: var(--brand-text);
         font-family: "Segoe UI Variable Display", Aptos, "Trebuchet MS", sans-serif;
     }
 
+    .stApp .main .block-container {
+        max-width: 1480px;
+        padding-top: 2.2rem;
+        padding-right: 3rem;
+        padding-bottom: 4rem;
+        padding-left: 3.6rem;
+    }
+
     .stApp [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, rgba(9, 18, 38, 0.98) 0%, rgba(5, 12, 24, 0.98) 100%);
-        border-right: 1px solid rgba(78, 139, 255, 0.18);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 249, 255, 0.98) 100%);
+        border-right: 1px solid rgba(36, 136, 255, 0.12);
+        box-shadow: 10px 0 30px rgba(18, 39, 74, 0.04);
+    }
+
+    .stApp [data-testid="stSidebar"] .block-container {
+        padding-top: 1.4rem;
+        padding-right: 1.05rem;
+        padding-left: 1.05rem;
     }
 
     .stApp [data-testid="stSidebarCollapseButton"],
     .stApp [data-testid="collapsedControl"] {
         border-radius: 999px;
-        background: rgba(8, 18, 39, 0.82);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+        background: rgba(255, 255, 255, 0.96);
+        border: 1px solid rgba(36, 136, 255, 0.14);
+        box-shadow: 0 10px 20px rgba(18, 39, 74, 0.08);
     }
 
     .stApp [data-testid="stSidebarCollapseButton"]:hover,
     .stApp [data-testid="collapsedControl"]:hover {
-        background: rgba(13, 27, 56, 0.95);
+        background: rgba(240, 246, 255, 1);
     }
 
     .stApp [data-testid="stSidebar"] * {
@@ -224,14 +244,15 @@ def inject_brand_theme():
     .stApp label,
     .stApp .stCaption,
     .stApp small {
-        color: #d7e3f4;
+        color: #5b6f8c;
+        line-height: 1.6;
     }
 
     .stApp [data-testid="stMetric"] {
-        background: linear-gradient(180deg, rgba(12, 26, 52, 0.88) 0%, rgba(7, 15, 29, 0.96) 100%);
-        border: 1px solid rgba(81, 177, 255, 0.22);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(247, 251, 255, 0.98) 100%);
+        border: 1px solid rgba(36, 136, 255, 0.12);
         border-radius: 20px;
-        padding: 1rem 1.1rem;
+        padding: 1.1rem 1.15rem;
         box-shadow: var(--brand-glow);
     }
 
@@ -246,15 +267,16 @@ def inject_brand_theme():
     }
 
     .stApp [data-testid="stVerticalBlockBorderWrapper"] {
-        background: linear-gradient(180deg, rgba(10, 20, 43, 0.8) 0%, rgba(4, 10, 24, 0.94) 100%);
-        border: 1px solid rgba(71, 163, 255, 0.18);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 255, 0.98) 100%);
+        border: 1px solid rgba(36, 136, 255, 0.12);
         border-radius: 22px;
         box-shadow: var(--brand-glow);
+        padding: 0.35rem 0.5rem 0.7rem;
     }
 
     .stApp [data-testid="stDataFrame"] {
-        background: linear-gradient(180deg, rgba(10, 20, 43, 0.74) 0%, rgba(4, 10, 24, 0.92) 100%);
-        border: 1px solid rgba(71, 163, 255, 0.18);
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(246, 250, 255, 0.98) 100%);
+        border: 1px solid rgba(36, 136, 255, 0.12);
         border-radius: 20px;
         overflow: hidden;
     }
@@ -262,12 +284,12 @@ def inject_brand_theme():
     .stApp .stButton > button,
     .stApp .stDownloadButton > button {
         background: linear-gradient(90deg, var(--brand-teal) 0%, var(--brand-blue) 100%);
-        color: #03111f;
+        color: #ffffff;
         border: 0;
         border-radius: 999px;
         font-weight: 700;
         letter-spacing: 0.02em;
-        box-shadow: 0 12px 26px rgba(36, 136, 255, 0.25);
+        box-shadow: 0 12px 26px rgba(36, 136, 255, 0.2);
         transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
     }
 
@@ -275,16 +297,16 @@ def inject_brand_theme():
     .stApp .stDownloadButton > button:hover {
         filter: brightness(1.05);
         transform: translateY(-1px);
-        box-shadow: 0 16px 32px rgba(36, 136, 255, 0.32);
+        box-shadow: 0 16px 32px rgba(36, 136, 255, 0.24);
     }
 
     .stApp .stNumberInput input,
     .stApp .stTextInput input,
     .stApp [data-baseweb="select"] > div,
     .stApp .stTextArea textarea {
-        background: rgba(7, 16, 31, 0.88);
+        background: rgba(255, 255, 255, 0.96);
         color: var(--brand-text);
-        border: 1px solid rgba(71, 163, 255, 0.22);
+        border: 1px solid rgba(36, 136, 255, 0.14);
         border-radius: 14px;
     }
 
@@ -293,14 +315,23 @@ def inject_brand_theme():
     }
 
     .stApp [data-baseweb="radio"] label {
-        background: rgba(10, 20, 43, 0.7);
-        border: 1px solid rgba(71, 163, 255, 0.16);
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(36, 136, 255, 0.12);
         border-radius: 14px;
-        padding: 0.45rem 0.65rem;
+        padding: 0.55rem 0.75rem;
     }
 
     .stApp [data-testid="stProgressBar"] > div > div {
         background: linear-gradient(90deg, var(--brand-teal) 0%, var(--brand-blue) 100%);
+    }
+
+    .stApp [data-testid="stSidebar"] [data-testid="stImage"] {
+        padding: 0.8rem 0.95rem;
+        margin-bottom: 0.45rem;
+        border-radius: 22px;
+        border: 1px solid rgba(36, 136, 255, 0.14);
+        background: linear-gradient(145deg, #081022 0%, #102447 60%, #0b1a34 100%);
+        box-shadow: 0 16px 34px rgba(18, 39, 74, 0.12);
     }
 
     .brand-hero {
@@ -314,9 +345,9 @@ def inject_brand_theme():
         padding: 1.8rem 2rem;
         margin: 0.25rem 0 1.1rem;
         border-radius: 28px;
-        border: 1px solid rgba(75, 171, 255, 0.22);
-        background: linear-gradient(135deg, rgba(7, 14, 30, 0.96) 0%, rgba(8, 18, 39, 0.85) 55%, rgba(4, 9, 22, 0.95) 100%);
-        box-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+        border: 1px solid rgba(36, 136, 255, 0.12);
+        background: linear-gradient(135deg, rgba(234, 244, 255, 0.96) 0%, rgba(255, 255, 255, 0.98) 52%, rgba(236, 249, 248, 0.96) 100%);
+        box-shadow: 0 24px 50px rgba(18, 39, 74, 0.08);
     }
 
     .brand-hero--compact {
@@ -332,7 +363,7 @@ def inject_brand_theme():
         inset: -30% auto auto -5%;
         width: 340px;
         height: 340px;
-        background: radial-gradient(circle, rgba(32, 227, 210, 0.18) 0%, rgba(32, 227, 210, 0.0) 70%);
+        background: radial-gradient(circle, rgba(24, 205, 190, 0.12) 0%, rgba(24, 205, 190, 0.0) 70%);
         pointer-events: none;
     }
 
@@ -343,7 +374,7 @@ def inject_brand_theme():
         bottom: -120px;
         width: 320px;
         height: 320px;
-        background: radial-gradient(circle, rgba(36, 136, 255, 0.2) 0%, rgba(36, 136, 255, 0.0) 72%);
+        background: radial-gradient(circle, rgba(36, 136, 255, 0.14) 0%, rgba(36, 136, 255, 0.0) 72%);
         pointer-events: none;
     }
 
@@ -365,9 +396,9 @@ def inject_brand_theme():
         padding: 0.35rem 0.8rem;
         margin-bottom: 1rem;
         border-radius: 999px;
-        border: 1px solid rgba(32, 227, 210, 0.24);
-        background: rgba(32, 227, 210, 0.08);
-        color: #bffcf4;
+        border: 1px solid rgba(24, 205, 190, 0.18);
+        background: rgba(24, 205, 190, 0.08);
+        color: #0f7c73;
         font-size: 0.78rem;
         font-weight: 700;
         letter-spacing: 0.18em;
@@ -378,12 +409,13 @@ def inject_brand_theme():
         margin: 0;
         font-size: clamp(2.3rem, 5vw, 3.8rem);
         line-height: 0.95;
+        color: #0f203a;
     }
 
     .brand-hero__copy p {
         max-width: 56rem;
         margin: 1rem 0 0;
-        color: #d0dcf0;
+        color: #5c6f8a;
         font-size: 1.02rem;
         line-height: 1.65;
     }
@@ -398,9 +430,9 @@ def inject_brand_theme():
     .brand-hero__pills span {
         padding: 0.5rem 0.95rem;
         border-radius: 999px;
-        border: 1px solid rgba(71, 163, 255, 0.22);
-        background: rgba(9, 20, 42, 0.74);
-        color: #dbecff;
+        border: 1px solid rgba(36, 136, 255, 0.12);
+        background: rgba(255, 255, 255, 0.82);
+        color: #27496d;
         font-size: 0.8rem;
         font-weight: 600;
         letter-spacing: 0.08em;
@@ -411,11 +443,16 @@ def inject_brand_theme():
         flex: 0 1 460px;
         margin: 0 auto;
         text-align: center;
+        padding: 1rem 1.2rem;
+        border-radius: 24px;
+        border: 1px solid rgba(36, 136, 255, 0.14);
+        background: linear-gradient(145deg, #081022 0%, #102447 60%, #0b1a34 100%);
+        box-shadow: 0 18px 42px rgba(18, 39, 74, 0.14);
     }
 
     .brand-hero__visual img {
         width: min(100%, 520px);
-        filter: drop-shadow(0 24px 45px rgba(0, 0, 0, 0.42));
+        filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.24));
     }
 
     .brand-hero--compact .brand-hero__copy {
@@ -448,14 +485,21 @@ def inject_brand_theme():
 
     .brand-note {
         margin: 0.35rem 0 1.6rem;
-        padding: 0.85rem 1rem;
+        padding: 1rem 1.15rem;
         border-radius: 16px;
-        background: rgba(7, 16, 31, 0.74);
-        border: 1px solid rgba(71, 163, 255, 0.16);
-        color: #cddbed;
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(36, 136, 255, 0.12);
+        color: #52657f;
+        box-shadow: var(--brand-glow);
     }
 
     @media (max-width: 900px) {
+        .stApp .main .block-container {
+            padding-top: 1.35rem;
+            padding-right: 1rem;
+            padding-left: 1rem;
+        }
+
         .brand-hero {
             padding: 1.35rem 1.2rem;
         }
@@ -540,54 +584,75 @@ def apply_brand_chart_layout(
     height: int,
     margin: dict | None = None,
 ) -> go.Figure:
-    fig.update_layout(
-        template="plotly_dark",
+    title_text = fig.layout.title.text if fig.layout.title and fig.layout.title.text else None
+    layout_updates = dict(
+        template="plotly_white",
         height=height,
-        margin=margin or dict(l=10, r=10, t=50, b=10),
+        margin=margin or dict(l=28, r=24, t=120, b=32),
         paper_bgcolor="rgba(0, 0, 0, 0)",
-        plot_bgcolor="rgba(8, 18, 39, 0.62)",
+        plot_bgcolor="#F7FAFE",
         font=dict(color=BRAND_COLORS["text"], family=PLOTLY_FONT_FAMILY),
-        title=dict(font=dict(size=20, color=BRAND_COLORS["text"])),
         colorway=CHART_COLOR_SEQUENCE,
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
+            y=1.08,
+            xanchor="left",
+            x=0.02,
             bgcolor="rgba(0, 0, 0, 0)",
-            font=dict(color="#D6E4F5"),
+            font=dict(color="#4E6481"),
         ),
+        legend_title_text="",
         hovermode="closest",
         hoverlabel=dict(
-            bgcolor=BRAND_COLORS["panel_alt"],
+            bgcolor="#FFFFFF",
             font_color=BRAND_COLORS["text"],
-            bordercolor=BRAND_COLORS["teal"],
+            bordercolor="rgba(36, 136, 255, 0.18)",
         ),
         coloraxis_colorbar=dict(
             bgcolor="rgba(0, 0, 0, 0)",
-            outlinecolor="rgba(121, 182, 255, 0.25)",
-            tickfont=dict(color="#D6E4F5"),
+            outlinecolor="rgba(36, 136, 255, 0.18)",
+            tickfont=dict(color="#4E6481"),
             title_font=dict(color=BRAND_COLORS["text"]),
         ),
+        uniformtext_minsize=10,
+        uniformtext_mode="hide",
     )
+    if title_text:
+        layout_updates["title"] = dict(
+            text=title_text,
+            font=dict(size=20, color=BRAND_COLORS["text"]),
+            x=0.02,
+            xanchor="left",
+            y=0.97,
+            yanchor="top",
+            pad=dict(b=18),
+        )
+
+    fig.update_layout(**layout_updates)
+    if not title_text:
+        # Plotly leaves an empty title object when update_layout(title=None) is used,
+        # which can render as "undefined" in indicator charts.
+        fig.layout.title = None
     fig.update_xaxes(
         showgrid=True,
-        gridcolor="rgba(104, 142, 191, 0.16)",
-        linecolor="rgba(104, 142, 191, 0.28)",
-        tickfont=dict(color="#B8CCE5"),
-        title_font=dict(color="#DDE8F6"),
+        gridcolor="rgba(153, 173, 199, 0.22)",
+        linecolor="rgba(153, 173, 199, 0.34)",
+        tickfont=dict(color="#52657F"),
+        title_font=dict(color="#314867"),
         zeroline=False,
         showline=True,
+        automargin=True,
     )
     fig.update_yaxes(
         showgrid=True,
-        gridcolor="rgba(104, 142, 191, 0.16)",
-        linecolor="rgba(104, 142, 191, 0.28)",
-        tickfont=dict(color="#B8CCE5"),
-        title_font=dict(color="#DDE8F6"),
+        gridcolor="rgba(153, 173, 199, 0.22)",
+        linecolor="rgba(153, 173, 199, 0.34)",
+        tickfont=dict(color="#52657F"),
+        title_font=dict(color="#314867"),
         zeroline=False,
         showline=True,
+        automargin=True,
     )
     return fig
 
@@ -708,11 +773,12 @@ def build_display_snapshot(portfolio_snapshot: pd.DataFrame) -> pd.DataFrame:
 def build_top_holdings_chart(portfolio_snapshot: pd.DataFrame) -> go.Figure:
     top = portfolio_snapshot.head(10).copy()
     top["Holding"] = top["Company"] + " (" + top["Ticker"] + ")"
+    y_max = top["Weight (%)"].max() * 1.22 if not top.empty else 5
     fig = px.bar(
         top,
         x="Holding",
         y="Weight (%)",
-        color="Sector",
+        color="Holding",
         color_discrete_sequence=CHART_COLOR_SEQUENCE,
         text="Weight (%)",
         title="Top 10 holdings by portfolio weight",
@@ -727,10 +793,13 @@ def build_top_holdings_chart(portfolio_snapshot: pd.DataFrame) -> go.Figure:
     fig.update_traces(
         texttemplate="%{text:.1f}%",
         textposition="outside",
-        marker_line=dict(color="rgba(3, 17, 31, 0.9)", width=1.1),
+        cliponaxis=False,
+        marker_line=dict(color="rgba(255, 255, 255, 0.85)", width=1.0),
     )
-    fig.update_layout(xaxis_title="")
-    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
+    fig.update_layout(xaxis_title="", showlegend=False)
+    fig.update_xaxes(tickangle=-32)
+    fig.update_yaxes(range=[0, y_max])
+    return apply_brand_chart_layout(fig, height=420, margin=dict(l=28, r=22, t=90, b=92))
 
 
 def build_allocation_pie(portfolio_snapshot: pd.DataFrame) -> go.Figure:
@@ -762,25 +831,43 @@ def build_allocation_pie(portfolio_snapshot: pd.DataFrame) -> go.Figure:
         color_discrete_sequence=CHART_COLOR_SEQUENCE,
     )
     fig.update_traces(
-        textfont_color=BRAND_COLORS["text"],
-        marker=dict(line=dict(color=BRAND_COLORS["panel_alt"], width=1.4)),
+        textfont_color="#FFFFFF",
+        marker=dict(line=dict(color="#FFFFFF", width=1.6)),
         hovertemplate="%{label}<br>%{value:.1f}% of portfolio<extra></extra>",
     )
-    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
+    fig.update_layout(
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.98,
+            xanchor="left",
+            x=1.02,
+            font=dict(color="#4E6481"),
+        )
+    )
+    fig = apply_brand_chart_layout(fig, height=420, margin=dict(l=20, r=120, t=90, b=24))
+    fig.update_layout(
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=0.98,
+            xanchor="left",
+            x=1.02,
+            font=dict(color="#4E6481"),
+        )
+    )
+    return fig
 
 
 def build_sector_chart(sector_df: pd.DataFrame) -> go.Figure:
     chart_df = sector_df.assign(weight_pct=sector_df["weight"] * 100)
+    y_max = chart_df["weight_pct"].max() * 1.2 if not chart_df.empty else 5
     fig = px.bar(
         chart_df,
         x="sector",
         y="weight_pct",
-        color="weight_pct",
-        color_continuous_scale=[
-            [0.0, BRAND_COLORS["blue"]],
-            [0.5, BRAND_COLORS["blue_soft"]],
-            [1.0, BRAND_COLORS["teal"]],
-        ],
+        color="sector",
+        color_discrete_sequence=CHART_COLOR_SEQUENCE,
         text="weight_pct",
         title="Sector exposure",
         labels={"sector": "Sector", "weight_pct": "Weight (%)"},
@@ -788,10 +875,13 @@ def build_sector_chart(sector_df: pd.DataFrame) -> go.Figure:
     fig.update_traces(
         texttemplate="%{text:.1f}%",
         textposition="outside",
-        marker_line=dict(color="rgba(3, 17, 31, 0.9)", width=1.1),
+        cliponaxis=False,
+        marker_line=dict(color="rgba(255, 255, 255, 0.85)", width=1.0),
     )
-    fig.update_layout(coloraxis_showscale=False)
-    return apply_brand_chart_layout(fig, height=380, margin=dict(l=10, r=10, t=50, b=10))
+    fig.update_layout(showlegend=False)
+    fig.update_xaxes(tickangle=-15)
+    fig.update_yaxes(range=[0, y_max])
+    return apply_brand_chart_layout(fig, height=380, margin=dict(l=28, r=22, t=90, b=70))
 
 
 def build_risk_gauge(volatility: float, risk_score: int) -> go.Figure:
@@ -804,15 +894,15 @@ def build_risk_gauge(volatility: float, risk_score: int) -> go.Figure:
             number={"suffix": "%", "valueformat": ".1f", "font": {"color": BRAND_COLORS["text"]}},
             title={"text": "Expected volatility", "font": {"size": 20, "color": BRAND_COLORS["text"]}},
             gauge={
-                "axis": {"range": [0, max_axis]},
-                "bar": {"color": BRAND_COLORS["teal"]},
-                "bgcolor": "rgba(0, 0, 0, 0)",
-                "bordercolor": "rgba(71, 163, 255, 0.18)",
+                "axis": {"range": [0, max_axis], "tickcolor": "#7B90AA"},
+                "bar": {"color": BRAND_COLORS["blue"]},
+                "bgcolor": "rgba(255, 255, 255, 0)",
+                "bordercolor": "rgba(36, 136, 255, 0.16)",
                 "borderwidth": 1,
                 "steps": [
-                    {"range": [0, max_axis * 0.4], "color": "rgba(36, 136, 255, 0.16)"},
-                    {"range": [max_axis * 0.4, max_axis * 0.7], "color": "rgba(103, 183, 255, 0.18)"},
-                    {"range": [max_axis * 0.7, max_axis], "color": "rgba(255, 107, 134, 0.18)"},
+                    {"range": [0, max_axis * 0.4], "color": "rgba(34, 197, 94, 0.16)"},
+                    {"range": [max_axis * 0.4, max_axis * 0.7], "color": "rgba(234, 179, 8, 0.18)"},
+                    {"range": [max_axis * 0.7, max_axis], "color": "rgba(239, 68, 68, 0.16)"},
                 ],
                 "threshold": {
                     "line": {"color": BRAND_COLORS["rose"], "width": 4},
@@ -822,7 +912,7 @@ def build_risk_gauge(volatility: float, risk_score: int) -> go.Figure:
             },
         )
     )
-    return apply_brand_chart_layout(fig, height=320, margin=dict(l=20, r=20, t=60, b=10))
+    return apply_brand_chart_layout(fig, height=320, margin=dict(l=24, r=24, t=84, b=18))
 
 
 def build_random_portfolios(
@@ -865,15 +955,15 @@ def build_risk_return_chart(
         y="Return",
         color="Sharpe",
         color_continuous_scale=[
-            [0.0, "#0B1730"],
-            [0.5, BRAND_COLORS["blue"]],
-            [1.0, BRAND_COLORS["teal"]],
+            [0.0, "#FFD166"],
+            [0.45, "#F97316"],
+            [1.0, "#7C3AED"],
         ],
         title="Risk vs return",
         labels={"Volatility": "Expected volatility (%)", "Return": "Expected return (%)"},
         opacity=0.45,
     )
-    fig.update_traces(marker=dict(size=9, line=dict(width=0)))
+    fig.update_traces(marker=dict(size=9, line=dict(width=0, color="rgba(255,255,255,0)")))
 
     optimized_metrics = compute_portfolio_metrics(
         optimized_weights,
@@ -890,7 +980,7 @@ def build_risk_return_chart(
 
     points = [
         ("Optimized portfolio", optimized_metrics, BRAND_COLORS["teal"]),
-        ("Equal-weight portfolio", equal_metrics, BRAND_COLORS["blue_soft"]),
+        ("Equal-weight portfolio", equal_metrics, "#F97316"),
     ]
 
     for name, metrics, color in points:
@@ -908,7 +998,7 @@ def build_risk_return_chart(
             )
         )
 
-    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
+    return apply_brand_chart_layout(fig, height=420, margin=dict(l=28, r=24, t=110, b=30))
 
 
 def build_market_benchmark(raw_df: pd.DataFrame) -> pd.Series:
@@ -951,8 +1041,8 @@ def build_performance_chart(value_frame: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     colors = {
         "Optimized portfolio": BRAND_COLORS["teal"],
-        "Equal-weight portfolio": BRAND_COLORS["blue_soft"],
-        "Market benchmark": BRAND_COLORS["slate"],
+        "Equal-weight portfolio": "#F97316",
+        "Market benchmark": "#7C3AED",
     }
 
     for column in value_frame.columns:
@@ -971,7 +1061,7 @@ def build_performance_chart(value_frame: pd.DataFrame) -> go.Figure:
         xaxis_title="Date",
         yaxis_title="Portfolio value ($)",
     )
-    return apply_brand_chart_layout(fig, height=420, margin=dict(l=10, r=10, t=50, b=10))
+    return apply_brand_chart_layout(fig, height=420, margin=dict(l=28, r=24, t=100, b=30))
 
 
 def build_drawdown_chart(value_frame: pd.DataFrame) -> go.Figure:
@@ -979,8 +1069,8 @@ def build_drawdown_chart(value_frame: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     colors = {
         "Optimized portfolio": BRAND_COLORS["teal"],
-        "Equal-weight portfolio": BRAND_COLORS["blue_soft"],
-        "Market benchmark": BRAND_COLORS["slate"],
+        "Equal-weight portfolio": "#F97316",
+        "Market benchmark": "#7C3AED",
     }
 
     for column in drawdown.columns:
@@ -999,7 +1089,7 @@ def build_drawdown_chart(value_frame: pd.DataFrame) -> go.Figure:
         xaxis_title="Date",
         yaxis_title="Drawdown (%)",
     )
-    return apply_brand_chart_layout(fig, height=360, margin=dict(l=10, r=10, t=50, b=10))
+    return apply_brand_chart_layout(fig, height=360, margin=dict(l=28, r=24, t=100, b=30))
 
 
 def build_comparison_table(
