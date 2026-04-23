@@ -48,9 +48,10 @@ CHART_COLOR_SEQUENCE = [
 PLOTLY_FONT_FAMILY = '"Segoe UI Variable Display", Aptos, "Trebuchet MS", sans-serif'
 
 st.set_page_config(
-    page_title="BL Portfolio",
+    page_title="AllocateIQ",
     page_icon=str(LOGO_PATH) if LOGO_PATH.exists() else ":chart_with_upwards_trend:",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 QUESTIONNAIRE = [
@@ -197,6 +198,18 @@ def inject_brand_theme():
         border-right: 1px solid rgba(78, 139, 255, 0.18);
     }
 
+    .stApp [data-testid="stSidebarCollapseButton"],
+    .stApp [data-testid="collapsedControl"] {
+        border-radius: 999px;
+        background: rgba(8, 18, 39, 0.82);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    }
+
+    .stApp [data-testid="stSidebarCollapseButton"]:hover,
+    .stApp [data-testid="collapsedControl"]:hover {
+        background: rgba(13, 27, 56, 0.95);
+    }
+
     .stApp [data-testid="stSidebar"] * {
         color: var(--brand-text);
     }
@@ -337,7 +350,7 @@ def inject_brand_theme():
 
     .brand-hero__copy {
         flex: 1 1 420px;
-        max-width: 740px;
+        max-width: 680px;
     }
 
     .brand-hero__kicker {
@@ -390,13 +403,13 @@ def inject_brand_theme():
     }
 
     .brand-hero__visual {
-        flex: 0 1 330px;
+        flex: 0 1 460px;
         margin: 0 auto;
         text-align: center;
     }
 
     .brand-hero__visual img {
-        width: min(100%, 320px);
+        width: min(100%, 520px);
         filter: drop-shadow(0 24px 45px rgba(0, 0, 0, 0.42));
     }
 
@@ -448,22 +461,22 @@ def render_app_hero():
     logo_base64 = load_logo_base64()
     logo_markup = ""
     if logo_base64:
-        logo_markup = f'<img src="data:image/png;base64,{logo_base64}" alt="BL Portfolio logo">'
+        logo_markup = f'<img src="data:image/png;base64,{logo_base64}" alt="AllocateIQ logo">'
 
     st.markdown(
         f"""
         <section class="brand-hero">
             <div class="brand-hero__copy">
-                <div class="brand-hero__kicker">BL Portfolio</div>
+                <div class="brand-hero__kicker">AllocateIQ</div>
                 <h1>Smart Portfolio Builder</h1>
                 <p>
-                    A tech-forward investing workspace powered by ML return signals, Black-Litterman optimization,
-                    and historical market data.
+                    A sleek portfolio intelligence workspace for turning your risk profile into an optimized equity allocation
+                    with explainable signals, historical context, and a sharper market view.
                 </p>
                 <div class="brand-hero__pills">
-                    <span>Smart insights</span>
-                    <span>Optimized returns</span>
-                    <span>Live risk fit</span>
+                    <span>Allocate smarter</span>
+                    <span>Optimize risk</span>
+                    <span>Explain decisions</span>
                 </div>
             </div>
             <div class="brand-hero__visual">
@@ -1022,7 +1035,8 @@ def build_ml_insights_table(portfolio_snapshot: pd.DataFrame) -> pd.DataFrame:
 def render_risk_questionnaire(prices: pd.DataFrame) -> tuple[int | None, str | None, float, bool]:
     with st.sidebar:
         if LOGO_PATH.exists():
-            st.image(str(LOGO_PATH), width=180)
+            st.image(str(LOGO_PATH), use_container_width=True)
+        st.caption("Use the arrow at the top of the sidebar to collapse or reopen this control panel anytime.")
         st.header("Step 1: Your preferences")
         st.caption("Answer all five questions. The portfolio refreshes automatically as you change answers or budget.")
 
